@@ -18,6 +18,15 @@ var migration002SQL string
 //go:embed migrations/003_session_sleep_metrics.sql
 var migration003SQL string
 
+//go:embed migrations/004_outdoor_log.sql
+var migration004SQL string
+
+//go:embed migrations/005_outdoor_log_session_id.sql
+var migration005SQL string
+
+//go:embed migrations/006_session_toilet.sql
+var migration006SQL string
+
 type Phase string
 
 const (
@@ -61,6 +70,7 @@ type DBSession struct {
 	Comment   string
 	SleepEase string // "", "easy", "ok", "hard"
 	Overtired bool
+	Toilet    string // "", "pee", "poop", "both", "nothing", "accident"
 }
 
 type DayStat struct {
@@ -101,7 +111,7 @@ var mealCatalog = []struct {
 }
 
 func initDB(db *sql.DB) error {
-	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL} {
+	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL} {
 		if err := runMigration(db, sql); err != nil {
 			return err
 		}
@@ -246,7 +256,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		SELECT id, woke_at, slept_at,
 		       COALESCE(comment, ''),
 		       COALESCE(sleep_ease, ''),
-		       COALESCE(overtired, 0)
+		       COALESCE(overtired, 0),
+		       COALESCE(toilet, '')
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
 		return nil, err
@@ -259,7 +270,7 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var wokeAt string
 		var sleptAt sql.NullString
 		var overtiredInt int
-		if err := rows.Scan(&s.ID, &wokeAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt); err != nil {
+		if err := rows.Scan(&s.ID, &wokeAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &s.Toilet); err != nil {
 			return nil, err
 		}
 		s.Overtired = overtiredInt == 1
@@ -407,6 +418,11 @@ func getDayStats(db *sql.DB, awakeMins int) ([]DayStat, error) {
 		days = append(days, d)
 	}
 	return days, rows.Err()
+}
+
+func setSessionToilet(db *sql.DB, id int, value string) error {
+	_, err := db.Exec(`UPDATE sessions SET toilet = ? WHERE id = ?`, value, id)
+	return err
 }
 
 // ── routine_sessions ──────────────────────────────────────────────────────────

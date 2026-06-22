@@ -64,6 +64,7 @@ type SessionView struct {
 	Comment        string
 	SleepEase      string
 	Overtired      bool
+	Toilet         string
 }
 
 // buildSchedule constructs the day's session list with planned times adjusted
@@ -124,13 +125,14 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 		}
 
 		var id int
-		var comment, sleepEase string
+		var comment, sleepEase, toilet string
 		var overtired bool
 		if i < len(dbSessions) {
 			id = dbSessions[i].ID
 			comment = dbSessions[i].Comment
 			sleepEase = dbSessions[i].SleepEase
 			overtired = dbSessions[i].Overtired
+			toilet = dbSessions[i].Toilet
 		}
 
 		views[i] = SessionView{
@@ -150,6 +152,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			Comment:        comment,
 			SleepEase:      sleepEase,
 			Overtired:      overtired,
+			Toilet:         toilet,
 		}
 	}
 

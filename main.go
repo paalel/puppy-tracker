@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -36,7 +37,13 @@ func main() {
 
 	app := &App{db: db, tmpl: tmpl}
 
+	staticSub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		log.Fatalf("static fs: %v", err)
+	}
+
 	mux := http.NewServeMux()
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 	mux.HandleFunc("GET /{$}", app.handleIndex)
 	mux.HandleFunc("GET /settings", app.handleGetSettings)
 	mux.HandleFunc("POST /settings", app.handlePostSettings)
@@ -55,6 +62,7 @@ func main() {
 	mux.HandleFunc("POST /api/routine/session/{id}", app.handleUpdateRoutineSession)
 	mux.HandleFunc("POST /api/routine/session/{id}/delete", app.handleDeleteRoutineSession)
 	mux.HandleFunc("POST /api/routine/session/{id}/move/{dir}", app.handleMoveRoutineSession)
+	mux.HandleFunc("POST /api/session/{id}/toilet", app.handleSetSessionToilet)
 
 	log.Println("Puppy Routine Tracker listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
