@@ -1,23 +1,29 @@
-app = "puppy-routine-tracker"
-primary_region = "arn"
+# fly.toml app configuration file generated for REDACTED_FLY_APP on 2026-06-22T10:22:52Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'REDACTED_FLY_APP'
+primary_region = 'arn'
 
 [build]
 
 [env]
-  DATABASE_PATH = "/data/puppy.db"
+  DATABASE_PATH = '/data/puppy.db'
+
+[[mounts]]
+  source = 'puppy_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
-[[mounts]]
-  source = "puppy_data"
-  destination = "/data"
-
 [[vm]]
-  memory = "256mb"
-  cpu_kind = "shared"
+  memory = '256mb'
+  cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256
