@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,8 @@ type PageData struct {
 	LastWokeAt     *time.Time
 	LastSleptAt    *time.Time
 	ShouldWindDown bool
+	IsLocal  bool
+	DBPath   string
 }
 
 type SettingsData struct {
@@ -108,6 +111,8 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 		LastWokeAt:     lastWokeAt,
 		LastSleptAt:    lastSleptAt,
 		ShouldWindDown: shouldWindDown,
+		IsLocal:        os.Getenv("FLY_APP_NAME") == "",
+		DBPath:         os.Getenv("DATABASE_PATH"),
 	}, nil
 }
 
