@@ -1,0 +1,48 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PuppyFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        canvas: '#F7F6F3',
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <style>
+        body { background-color: #F7F6F3; }
+        * { -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="text-stone-800 min-h-screen">
+    <div class="max-w-md mx-auto px-4 py-6 pb-12">
+
+        <header class="flex items-center justify-between mb-5">
+            <div>
+                <h1 class="text-lg font-semibold tracking-tight text-stone-800">PuppyFlow</h1>
+                <p class="text-xs text-stone-400">Nova · Duck Toller · 9 weeks</p>
+            </div>
+            <span class="text-xl">🦆</span>
+        </header>
+
+        {{/* Polling container — updates every 2 s for the second owner's device */}}
+        <div id="state-container"
+             hx-get="/api/state"
+             hx-trigger="every 2s"
+             hx-swap="innerHTML">
+            {{template "state" .}}
+        </div>
+
+    </div>
+</body>
+</html>
+{{end}}

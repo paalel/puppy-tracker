@@ -1,0 +1,192 @@
+{{define "state"}}
+
+{{/* ── Current Phase Card ─────────────────────────────────────────────────── */}}
+
+{{if isPhase .Phase "SLEEPING"}}
+<div class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 mb-4">
+    <div class="flex items-center gap-2 mb-1">
+        <span class="w-2 h-2 rounded-full bg-indigo-300 flex-shrink-0"></span>
+        <span class="text-xs font-semibold uppercase tracking-widest text-indigo-500">Sleeping</span>
+        <span class="ml-auto text-sm font-mono text-stone-400">{{.Elapsed}}</span>
+    </div>
+    <h2 class="text-xl font-semibold text-stone-800 mb-4">Nova is resting</h2>
+
+    {{with nextSession .Sessions}}
+    <div class="bg-stone-50 border border-stone-100 rounded-xl p-3 mb-4">
+        <p class="text-xs text-stone-400 mb-1">Next up — ~{{fmtPlan .PlannedWake}}</p>
+        <p class="text-sm font-medium text-stone-700">{{.Label}}</p>
+        <ul class="mt-1.5 space-y-0.5">
+            {{range .Activities}}
+            <li class="text-xs text-stone-500 flex gap-1.5"><span class="text-stone-300">·</span>{{.}}</li>
+            {{end}}
+        </ul>
+    </div>
+    {{end}}
+
+    <form hx-post="/api/phase" hx-target="#state-container" hx-swap="innerHTML">
+        <input type="hidden" name="phase" value="ACTIVE">
+        <button type="submit"
+            class="w-full py-3.5 rounded-xl font-semibold text-sm text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors select-none">
+            Puppy Woke Up
+        </button>
+    </form>
+</div>
+
+{{else if isPhase .Phase "ACTIVE"}}
+<div class="bg-white rounded-2xl border border-emerald-200 shadow-sm p-5 mb-4">
+    <div class="flex items-center gap-2 mb-1">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></span>
+        <span class="text-xs font-semibold uppercase tracking-widest text-emerald-600">Active</span>
+        <span class="ml-auto text-sm font-mono text-stone-400">{{.Elapsed}}</span>
+    </div>
+    <h2 class="text-xl font-semibold text-stone-800 mb-1">Nova is awake</h2>
+    <p class="text-xs text-stone-400 mb-4">Goal: keep this under 25 minutes</p>
+
+    {{with currentSession .Sessions}}
+    <div class="mb-4">
+        <p class="text-xs font-medium text-stone-400 uppercase tracking-wide mb-2">{{.Label}}</p>
+        <ul class="space-y-1.5">
+            {{range .Activities}}
+            <li class="text-sm text-stone-600 flex gap-2"><span class="text-stone-300">·</span>{{.}}</li>
+            {{end}}
+        </ul>
+    </div>
+    {{end}}
+
+    <form hx-post="/api/phase" hx-target="#state-container" hx-swap="innerHTML">
+        <input type="hidden" name="phase" value="WIND_DOWN">
+        <button type="submit"
+            class="w-full py-3.5 rounded-xl font-semibold text-sm text-white bg-amber-500 hover:bg-amber-400 active:bg-amber-600 transition-colors select-none">
+            Start Wind Down
+        </button>
+    </form>
+</div>
+
+{{else}}
+<div class="bg-white rounded-2xl border border-amber-200 shadow-sm p-5 mb-4">
+    <div class="flex items-center gap-2 mb-1">
+        <span class="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0"></span>
+        <span class="text-xs font-semibold uppercase tracking-widest text-amber-600">Wind Down</span>
+        <span class="ml-auto text-sm font-mono text-stone-400">{{.Elapsed}}</span>
+    </div>
+    <h2 class="text-xl font-semibold text-stone-800 mb-4">Winding down</h2>
+
+    <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-4">
+        <p class="text-sm font-medium text-amber-800 mb-2">Become a boring stone</p>
+        <ul class="space-y-1.5">
+            <li class="text-sm text-amber-700 flex gap-2"><span class="text-amber-300">·</span>No eye contact, no talking</li>
+            <li class="text-sm text-amber-700 flex gap-2"><span class="text-amber-300">·</span>Protect toes and clothing</li>
+            <li class="text-sm text-amber-700 flex gap-2"><span class="text-amber-300">·</span>Ignore demanding behavior</li>
+            <li class="text-sm text-amber-700 flex gap-2"><span class="text-amber-300">·</span>Move calmly toward the crate</li>
+        </ul>
+    </div>
+
+    <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-4">
+        <p class="text-xs font-medium text-indigo-700 mb-1.5">Before closing the crate</p>
+        <ul class="space-y-1">
+            <li class="text-xs text-indigo-600 flex gap-2"><span>✓</span>Remove the water bowl</li>
+            <li class="text-xs text-indigo-600 flex gap-2"><span>✓</span>Cover the crate completely</li>
+        </ul>
+    </div>
+
+    <form hx-post="/api/phase" hx-target="#state-container" hx-swap="innerHTML">
+        <input type="hidden" name="phase" value="SLEEPING">
+        <button type="submit"
+            class="w-full py-3.5 rounded-xl font-semibold text-sm text-white bg-indigo-500 hover:bg-indigo-400 active:bg-indigo-600 transition-colors select-none">
+            Put to Sleep
+        </button>
+    </form>
+</div>
+{{end}}
+
+{{/* ── Night Lock ───────────────────────────────────────────────────────────── */}}
+{{if .NightLock}}
+<div class="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 mb-4 text-sm text-rose-700">
+    🔒 <strong>Night lock</strong> — Remove water from crate. Sleep window: 23:00 – 09:00.
+</div>
+{{end}}
+
+{{/* ── Today's Schedule ─────────────────────────────────────────────────────── */}}
+<div class="bg-white rounded-2xl border border-stone-200 shadow-sm mb-4 overflow-hidden">
+    <div class="px-4 pt-4 pb-3 border-b border-stone-100">
+        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Today's Schedule</h2>
+    </div>
+    <div class="divide-y divide-stone-50">
+    {{range .Sessions}}
+    <div class="px-4 py-3 flex items-start gap-3 {{if .IsActive}}bg-emerald-50{{end}} {{if .IsPast}}opacity-60{{end}}">
+
+        <div class="w-4 flex-shrink-0 pt-0.5 text-center">
+            {{if .IsPast}}<span class="text-xs text-stone-400">✓</span>
+            {{else if .IsActive}}<span class="text-xs text-emerald-500">▶</span>
+            {{else}}<span class="text-xs text-stone-300">○</span>{{end}}
+        </div>
+
+        <div class="min-w-0 flex-1">
+            <div class="flex items-baseline justify-between gap-2">
+                <span class="text-sm font-medium text-stone-700">{{.Label}}</span>
+                <span class="text-xs font-mono text-stone-400 flex-shrink-0">
+                    {{if .ActualWake}}{{fmtTime .ActualWake}}{{else}}~{{fmtPlan .PlannedWake}}{{end}}
+                </span>
+            </div>
+            {{if .IsPast}}
+            <p class="text-xs text-stone-400 mt-0.5">
+                Awake {{fmtTime .ActualWake}}{{if .ActualSleep}} · Slept {{fmtTime .ActualSleep}}{{end}}
+            </p>
+            {{else if .IsActive}}
+            <p class="text-xs text-emerald-600 mt-0.5">Active now · since {{fmtTime .ActualWake}}</p>
+            {{else}}
+            <p class="text-xs text-stone-400 mt-0.5">
+                {{range .Activities}}{{.}}{{break}}{{end}}
+            </p>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+    </div>
+</div>
+
+{{/* ── Meals ────────────────────────────────────────────────────────────────── */}}
+<div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+    <div class="px-4 pt-4 pb-3 border-b border-stone-100">
+        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Meals</h2>
+    </div>
+    <div class="divide-y divide-stone-50">
+    {{range .Meals}}
+    <div class="px-4 py-3">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-stone-700">{{.Label}}</span>
+            <span class="text-xs font-mono {{if isPastDeadline .Deadline}}text-rose-400{{else}}text-stone-400{{end}}">
+                {{if isPastDeadline .Deadline}}⚠ {{end}}{{.Deadline}}
+            </span>
+        </div>
+        <div class="grid grid-cols-4 gap-1">
+            <form class="contents" hx-post="/api/meal" hx-target="#state-container" hx-swap="innerHTML">
+                <input type="hidden" name="meal" value="{{.Type}}">
+                <button name="amount" value="nothing" type="submit"
+                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
+                    {{if isSelected .Amount "nothing"}}bg-stone-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
+                    None
+                </button>
+                <button name="amount" value="too_little" type="submit"
+                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
+                    {{if isSelected .Amount "too_little"}}bg-amber-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
+                    Little
+                </button>
+                <button name="amount" value="pretty_good" type="submit"
+                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
+                    {{if isSelected .Amount "pretty_good"}}bg-sky-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
+                    Good
+                </button>
+                <button name="amount" value="full_meal" type="submit"
+                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
+                    {{if isSelected .Amount "full_meal"}}bg-emerald-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
+                    Full
+                </button>
+            </form>
+        </div>
+    </div>
+    {{end}}
+    </div>
+</div>
+
+{{end}}
