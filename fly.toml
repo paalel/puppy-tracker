@@ -10,6 +10,7 @@ primary_region = 'arn'
 
 [env]
   DATABASE_PATH = '/data/puppy.db'
+  TZ = 'Europe/Oslo'
 
 [[mounts]]
   source = 'puppy_data'

@@ -293,6 +293,43 @@ func setSessionComment(db *sql.DB, id int, comment string) error {
 	return err
 }
 
+// setSessionWakeTime updates the woke_at timestamp, preserving the existing date
+// and only changing the hour/minute to the value supplied in local time.
+func setSessionWakeTime(db *sql.DB, id int, newTime time.Time) error {
+	var wokeAtStr string
+	if err := db.QueryRow(`SELECT COALESCE(woke_at, '') FROM sessions WHERE id = ?`, id).Scan(&wokeAtStr); err != nil {
+		return err
+	}
+	existing, err := parseTimestamp(wokeAtStr)
+	if err != nil {
+		return fmt.Errorf("parse existing wake time: %w", err)
+	}
+	local := existing.Local()
+	combined := time.Date(local.Year(), local.Month(), local.Day(),
+		newTime.Hour(), newTime.Minute(), 0, 0, time.Local)
+	_, err = db.Exec(`UPDATE sessions SET woke_at = ? WHERE id = ?`,
+		combined.UTC().Format("2006-01-02 15:04:05"), id)
+	return err
+}
+
+// setSessionSleepTime updates the slept_at timestamp, preserving the existing date.
+func setSessionSleepTime(db *sql.DB, id int, newTime time.Time) error {
+	var sleptAtStr string
+	if err := db.QueryRow(`SELECT COALESCE(slept_at, '') FROM sessions WHERE id = ?`, id).Scan(&sleptAtStr); err != nil {
+		return err
+	}
+	existing, err := parseTimestamp(sleptAtStr)
+	if err != nil {
+		return fmt.Errorf("parse existing sleep time: %w", err)
+	}
+	local := existing.Local()
+	combined := time.Date(local.Year(), local.Month(), local.Day(),
+		newTime.Hour(), newTime.Minute(), 0, 0, time.Local)
+	_, err = db.Exec(`UPDATE sessions SET slept_at = ? WHERE id = ?`,
+		combined.UTC().Format("2006-01-02 15:04:05"), id)
+	return err
+}
+
 func getDayStats(db *sql.DB, awakeMins int) ([]DayStat, error) {
 	rows, err := db.Query(`
 		SELECT
