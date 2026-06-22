@@ -1,0 +1,17 @@
+{
+  "name": "Puppy Routine Tracker",
+  "short_name": "Puppy",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F6F3",
+  "theme_color": "#1c1917",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
