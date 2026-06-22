@@ -72,20 +72,31 @@ type SessionView struct {
 // buildSchedule constructs the day's session list with planned times adjusted
 // by actual data. Each session's planned wake = previous session's actual_slept_at
 // + napMins, cascading forward through the day.
-func buildSchedule(date string, dbSessions []DBSession, routineSessions []RoutineSession, awakeMins, napMins int) []SessionView {
+func buildSchedule(date string, dbSessions []DBSession, routineSessions []RoutineSession, cfg *Config) []SessionView {
 	loc := time.Local
 	today, _ := time.ParseInLocation("2006-01-02", date, loc)
-	awake := time.Duration(awakeMins) * time.Minute
-	nap := time.Duration(napMins) * time.Minute
+	awake := time.Duration(cfg.AwakeMinutes) * time.Minute
+	nap := time.Duration(cfg.NapMinutes) * time.Minute
+
+	dbByRoutineID := make(map[int]DBSession, len(dbSessions))
+	for _, s := range dbSessions {
+		if s.RoutineSessionID != nil {
+			dbByRoutineID[*s.RoutineSessionID] = s
+		}
+	}
 
 	views := make([]SessionView, len(routineSessions))
 
 	for i, rs := range routineSessions {
-		var plannedWake time.Time
+		var dbSess *DBSession
+		if s, ok := dbByRoutineID[rs.ID]; ok {
+			dbSess = &s
+		}
 
+		var plannedWake time.Time
 		if i == 0 {
-			if len(dbSessions) > 0 && dbSessions[0].WokeAt != nil {
-				plannedWake = dbSessions[0].WokeAt.Local()
+			if dbSess != nil && dbSess.WokeAt != nil {
+				plannedWake = dbSess.WokeAt.Local()
 			} else {
 				h, m := parseHHMM(baseWakeTimes[0])
 				plannedWake = today.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute)
@@ -102,9 +113,9 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 		}
 
 		var aw, as *time.Time
-		if i < len(dbSessions) {
-			aw = dbSessions[i].WokeAt
-			as = dbSessions[i].SleptAt
+		if dbSess != nil {
+			aw = dbSess.WokeAt
+			as = dbSess.SleptAt
 		}
 
 		var actualDuration, durationClass string
@@ -129,13 +140,13 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 		var id int
 		var comment, sleepEase, toilet string
 		var overtired, sleepInterrupted bool
-		if i < len(dbSessions) {
-			id = dbSessions[i].ID
-			comment = dbSessions[i].Comment
-			sleepEase = dbSessions[i].SleepEase
-			overtired = dbSessions[i].Overtired
-			sleepInterrupted = dbSessions[i].SleepInterrupted
-			toilet = dbSessions[i].Toilet
+		if dbSess != nil {
+			id = dbSess.ID
+			comment = dbSess.Comment
+			sleepEase = dbSess.SleepEase
+			overtired = dbSess.Overtired
+			sleepInterrupted = dbSess.SleepInterrupted
+			toilet = dbSess.Toilet
 		}
 
 		views[i] = SessionView{

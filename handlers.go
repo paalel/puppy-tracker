@@ -102,7 +102,7 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 		Phase:          state.Phase,
 		Elapsed:        formatDuration(elapsed),
 		StartedAt:      state.PhaseStartedAt.Local().Format("15:04"),
-		Sessions:       buildSchedule(today, dbSessions, routineSessions, cfg.AwakeMinutes, cfg.NapMinutes),
+		Sessions:       buildSchedule(today, dbSessions, routineSessions, cfg),
 		Meals:          meals,
 		Config:         cfg,
 		LastWokeAt:     lastWokeAt,
@@ -154,6 +154,35 @@ func parseTemplates() (*template.Template, error) {
 			return nil
 		},
 		"joinActivities": joinActivities,
+		"dayLabel": func(date string) string {
+			today := time.Now().Format("2006-01-02")
+			yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+			switch date {
+			case today:
+				return "Today"
+			case yesterday:
+				return "Yesterday"
+			default:
+				if t, err := time.Parse("2006-01-02", date); err == nil {
+					return t.Format("Mon Jan 2")
+				}
+				return date
+			}
+		},
+		"awakeClass": func(avgMins, targetMins int) string {
+			diff := avgMins - targetMins
+			if diff < 0 {
+				diff = -diff
+			}
+			switch {
+			case diff < 10:
+				return "text-emerald-600"
+			case diff < 20:
+				return "text-amber-500"
+			default:
+				return "text-rose-500"
+			}
+		},
 	}
 	return template.New("").Funcs(funcs).ParseFS(templateFS, "templates/*.html")
 }
@@ -349,7 +378,7 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	days, err := getDayStats(a.db, cfg.AwakeMinutes)
+	days, err := getDayStats(a.db)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -386,32 +415,20 @@ func (a *App) handleSetSleepEase(w http.ResponseWriter, r *http.Request) {
 	a.renderStateFragment(w)
 }
 
-func (a *App) handleToggleOvertired(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
-		return
+func (a *App) handleToggleSessionBool(column string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := toggleSessionBool(a.db, id, column); err != nil {
+			log.Printf("toggleSessionBool %s: %v", column, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		a.renderStateFragment(w)
 	}
-	if err := toggleOvertired(a.db, id); err != nil {
-		log.Printf("toggleOvertired: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	a.renderStateFragment(w)
-}
-
-func (a *App) handleToggleSleepInterrupted(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
-		return
-	}
-	if err := toggleSleepInterrupted(a.db, id); err != nil {
-		log.Printf("toggleSleepInterrupted: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	a.renderStateFragment(w)
 }
 
 func (a *App) handleSetSessionComment(w http.ResponseWriter, r *http.Request) {
@@ -433,50 +450,29 @@ func (a *App) handleSetSessionComment(w http.ResponseWriter, r *http.Request) {
 	a.renderStateFragment(w)
 }
 
-func (a *App) handleSetSessionWakeTime(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
-		return
+func (a *App) handleSetSessionTime(column string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		t, err := time.ParseInLocation("15:04", r.FormValue("time"), time.Local)
+		if err != nil {
+			http.Error(w, "invalid time", http.StatusBadRequest)
+			return
+		}
+		if err := setSessionTime(a.db, id, column, t); err != nil {
+			log.Printf("setSessionTime %s: %v", column, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		a.renderStateFragment(w)
 	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	t, err := time.ParseInLocation("15:04", r.FormValue("time"), time.Local)
-	if err != nil {
-		http.Error(w, "invalid time", http.StatusBadRequest)
-		return
-	}
-	if err := setSessionWakeTime(a.db, id, t); err != nil {
-		log.Printf("setSessionWakeTime: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	a.renderStateFragment(w)
-}
-
-func (a *App) handleSetSessionSleepTime(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	t, err := time.ParseInLocation("15:04", r.FormValue("time"), time.Local)
-	if err != nil {
-		http.Error(w, "invalid time", http.StatusBadRequest)
-		return
-	}
-	if err := setSessionSleepTime(a.db, id, t); err != nil {
-		log.Printf("setSessionSleepTime: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	a.renderStateFragment(w)
 }
 
 // ── API: routine sessions ─────────────────────────────────────────────────────
@@ -573,6 +569,17 @@ func (a *App) handleSetSessionToilet(w http.ResponseWriter, r *http.Request) {
 
 // ── fragment renderers ────────────────────────────────────────────────────────
 
+func (a *App) renderFragment(w http.ResponseWriter, name string, data any) {
+	var buf bytes.Buffer
+	if err := a.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
+		log.Printf("renderFragment %s: %v", name, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(buf.Bytes())
+}
+
 func (a *App) renderStateFragment(w http.ResponseWriter) {
 	data, err := buildPageData(a.db)
 	if err != nil {
@@ -580,14 +587,7 @@ func (a *App) renderStateFragment(w http.ResponseWriter) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var buf bytes.Buffer
-	if err := a.tmpl.ExecuteTemplate(&buf, "state", data); err != nil {
-		log.Printf("ExecuteTemplate state: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
+	a.renderFragment(w, "state", data)
 }
 
 func (a *App) renderRoutineSessionsFrag(w http.ResponseWriter) {
@@ -597,12 +597,5 @@ func (a *App) renderRoutineSessionsFrag(w http.ResponseWriter) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var buf bytes.Buffer
-	if err := a.tmpl.ExecuteTemplate(&buf, "routine-sessions", sessions); err != nil {
-		log.Printf("ExecuteTemplate routine-sessions: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
+	a.renderFragment(w, "routine-sessions", sessions)
 }
