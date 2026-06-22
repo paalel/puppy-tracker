@@ -7,6 +7,7 @@ import (
 	"os"
 
 	_ "modernc.org/sqlite"
+	_ "time/tzdata" // embed IANA timezone database so TZ env var works on Alpine
 )
 
 func main() {
@@ -43,6 +44,8 @@ func main() {
 	mux.HandleFunc("POST /api/session/{id}/comment", app.handleSetSessionComment)
 	mux.HandleFunc("POST /api/session/{id}/sleep-ease", app.handleSetSleepEase)
 	mux.HandleFunc("POST /api/session/{id}/overtired", app.handleToggleOvertired)
+	mux.HandleFunc("POST /api/session/{id}/wake-time", app.handleSetSessionWakeTime)
+	mux.HandleFunc("POST /api/session/{id}/sleep-time", app.handleSetSessionSleepTime)
 	mux.HandleFunc("GET /api/state", app.handleGetState)
 	mux.HandleFunc("POST /api/phase", app.handlePostPhase)
 	mux.HandleFunc("POST /api/meal", app.handlePostMeal)

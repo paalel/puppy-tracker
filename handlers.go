@@ -420,6 +420,52 @@ func (a *App) handleSetSessionComment(w http.ResponseWriter, r *http.Request) {
 	a.renderStateFragment(w)
 }
 
+func (a *App) handleSetSessionWakeTime(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	t, err := time.ParseInLocation("15:04", r.FormValue("time"), time.Local)
+	if err != nil {
+		http.Error(w, "invalid time", http.StatusBadRequest)
+		return
+	}
+	if err := setSessionWakeTime(a.db, id, t); err != nil {
+		log.Printf("setSessionWakeTime: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
+}
+
+func (a *App) handleSetSessionSleepTime(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	t, err := time.ParseInLocation("15:04", r.FormValue("time"), time.Local)
+	if err != nil {
+		http.Error(w, "invalid time", http.StatusBadRequest)
+		return
+	}
+	if err := setSessionSleepTime(a.db, id, t); err != nil {
+		log.Printf("setSessionSleepTime: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
+}
+
 // ── API: routine sessions ─────────────────────────────────────────────────────
 
 func (a *App) handleCreateRoutineSession(w http.ResponseWriter, r *http.Request) {

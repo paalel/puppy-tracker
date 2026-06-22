@@ -136,10 +136,27 @@
                 </span>
             </div>
             {{if .IsPast}}
-            <p class="text-xs text-stone-400 mt-0.5">
-                Woke {{fmtTime .ActualWake}}{{if .ActualSleep}} · Slept {{fmtTime .ActualSleep}}{{end}}
-                {{if .ActualDuration}} · <span class="{{.DurationClass}} font-medium">{{.ActualDuration}}</span>{{end}}
-            </p>
+            <div class="flex items-center gap-2 mt-1">
+                <label class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
+                    <span class="text-xs text-stone-400">↑</span>
+                    <input type="time" name="time" value="{{fmtTime .ActualWake}}"
+                        hx-post="/api/session/{{.ID}}/wake-time"
+                        hx-target="#state-container" hx-swap="innerHTML" hx-trigger="change"
+                        class="text-xs font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none flex-1 min-w-0">
+                </label>
+                {{if .ActualSleep}}
+                <label class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
+                    <span class="text-xs text-stone-400">↓</span>
+                    <input type="time" name="time" value="{{fmtTime .ActualSleep}}"
+                        hx-post="/api/session/{{.ID}}/sleep-time"
+                        hx-target="#state-container" hx-swap="innerHTML" hx-trigger="change"
+                        class="text-xs font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none flex-1 min-w-0">
+                </label>
+                {{end}}
+                {{if .ActualDuration}}
+                <span class="ml-auto {{.DurationClass}} text-xs font-medium">{{.ActualDuration}}</span>
+                {{end}}
+            </div>
             {{if .ID}}
             <div class="flex items-center gap-1 mt-2">
                 <span class="text-xs text-stone-300 mr-0.5">Sleep</span>
