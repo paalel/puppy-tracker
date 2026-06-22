@@ -16,6 +16,9 @@ import (
 //go:embed templates
 var templateFS embed.FS
 
+//go:embed static
+var staticFS embed.FS
+
 type App struct {
 	db   *sql.DB
 	tmpl *template.Template
@@ -531,6 +534,31 @@ func (a *App) handleMoveRoutineSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderRoutineSessionsFrag(w)
+}
+
+func (a *App) handleSetSessionToilet(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	value := r.FormValue("value")
+	switch value {
+	case "pee", "poop", "both", "nothing", "accident":
+	default:
+		http.Error(w, "invalid value", http.StatusBadRequest)
+		return
+	}
+	if err := setSessionToilet(a.db, id, value); err != nil {
+		log.Printf("setSessionToilet: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
 }
 
 // ── fragment renderers ────────────────────────────────────────────────────────

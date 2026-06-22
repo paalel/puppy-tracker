@@ -89,6 +89,29 @@
         </button>
     </form>
 
+    {{with currentSession .Sessions}}{{if .ID}}
+    <div class="mt-4 pt-4 border-t border-stone-100">
+        <p class="text-xs text-stone-400 mb-2">Toilet</p>
+        <form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
+            <button name="value" value="pee" type="submit"
+                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                {{if eq .Toilet "pee"}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pee</button>
+            <button name="value" value="poop" type="submit"
+                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                {{if eq .Toilet "poop"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Poop</button>
+            <button name="value" value="both" type="submit"
+                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                {{if eq .Toilet "both"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Both</button>
+            <button name="value" value="nothing" type="submit"
+                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                {{if eq .Toilet "nothing"}}bg-stone-300 text-stone-600 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Nope</button>
+            <button name="value" value="accident" type="submit"
+                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                {{if eq .Toilet "accident"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
+        </form>
+    </div>
+    {{end}}{{end}}
+
     {{if .LastWokeAt}}
     <div class="flex items-center gap-3 mt-4 pt-4 border-t border-stone-100">
         <span class="text-xs text-stone-400 flex-1">Woke up at {{fmtTime .LastWokeAt}}</span>
@@ -158,8 +181,8 @@
                 {{end}}
             </div>
             {{if .ID}}
-            <div class="flex items-center gap-1 mt-2">
-                <span class="text-xs text-stone-300 mr-0.5">Sleep</span>
+            <p class="text-xs text-stone-400 mt-2 mb-1">Put to sleep</p>
+            <div class="flex items-center gap-1">
                 <form class="contents" hx-post="/api/session/{{.ID}}/sleep-ease" hx-target="#state-container" hx-swap="innerHTML">
                     <button name="value" value="easy" title="Easy to settle"
                         class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
@@ -177,12 +200,30 @@
                         {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
                 </form>
             </div>
+            <p class="text-xs text-stone-400 mt-2 mb-1">Toilet</p>
+            <form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
+                <button name="value" value="pee" type="submit"
+                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                    {{if eq .Toilet "pee"}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pee</button>
+                <button name="value" value="poop" type="submit"
+                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                    {{if eq .Toilet "poop"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Poop</button>
+                <button name="value" value="both" type="submit"
+                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                    {{if eq .Toilet "both"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Both</button>
+                <button name="value" value="nothing" type="submit"
+                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                    {{if eq .Toilet "nothing"}}bg-stone-300 text-stone-600 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Nope</button>
+                <button name="value" value="accident" type="submit"
+                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                    {{if eq .Toilet "accident"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
+            </form>
             <input type="text" name="comment" value="{{.Comment}}" placeholder="Add a note…"
                 hx-post="/api/session/{{.ID}}/comment"
                 hx-target="#state-container"
                 hx-swap="innerHTML"
                 hx-trigger="change"
-                class="w-full mt-1.5 text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors">
+                class="w-full mt-2 text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors">
             {{end}}
             {{else if .IsActive}}
             <p class="text-xs text-emerald-600 mt-0.5">Active now · since {{fmtTime .ActualWake}}</p>
@@ -196,7 +237,7 @@
 </div>
 
 {{/* ── Meals ────────────────────────────────────────────────────────────────── */}}
-<div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+<div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden mb-4">
     <div class="px-4 pt-4 pb-3 border-b border-stone-100">
         <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Meals</h2>
     </div>
