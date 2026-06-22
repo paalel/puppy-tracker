@@ -1,16 +1,21 @@
 package main
 
 import (
+	_ "embed"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
+
+//go:embed migrations/001_initial.sql
+var migrationSQL string
 
 type Phase string
 
 const (
 	PhaseActive   Phase = "ACTIVE"
-	PhaseWindDown Phase = "WIND_DOWN"
 	PhaseSleeping Phase = "SLEEPING"
 )
 
@@ -49,6 +54,19 @@ type DBSession struct {
 	SleptAt *time.Time
 }
 
+type Config struct {
+	PuppyName    string
+	AwakeMinutes int
+	NapMinutes   int
+}
+
+type RoutineSession struct {
+	ID         int
+	Position   int
+	Label      string
+	Activities []string
+}
+
 var mealCatalog = []struct {
 	Type     MealType
 	Label    string
@@ -59,34 +77,21 @@ var mealCatalog = []struct {
 	{MealDinner, "Dinner", "19:00"},
 }
 
+// initDB runs the embedded migration SQL. Every statement is idempotent
+// (IF NOT EXISTS / INSERT OR IGNORE), so this is safe to call on an
+// existing database.
 func initDB(db *sql.DB) error {
-	stmts := []string{
-		`PRAGMA journal_mode=WAL`,
-		`PRAGMA busy_timeout=5000`,
-		`CREATE TABLE IF NOT EXISTS puppy_state (
-			id               INTEGER PRIMARY KEY CHECK (id = 1),
-			phase            TEXT     NOT NULL DEFAULT 'SLEEPING',
-			phase_started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`INSERT OR IGNORE INTO puppy_state (id, phase, phase_started_at)
-		 VALUES (1, 'SLEEPING', CURRENT_TIMESTAMP)`,
-		`CREATE TABLE IF NOT EXISTS sessions (
-			id       INTEGER PRIMARY KEY AUTOINCREMENT,
-			date     TEXT     NOT NULL,
-			woke_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			slept_at DATETIME
-		)`,
-		`CREATE TABLE IF NOT EXISTS meals (
-			date       TEXT NOT NULL,
-			meal_type  TEXT NOT NULL,
-			amount     TEXT NOT NULL DEFAULT 'nothing',
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY (date, meal_type)
-		)`,
-	}
-	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
-			return fmt.Errorf("initDB %q: %w", s[:min(len(s), 40)], err)
+	for _, stmt := range strings.Split(migrationSQL, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := db.Exec(stmt); err != nil {
+			snippet := stmt
+			if len(snippet) > 60 {
+				snippet = snippet[:60]
+			}
+			return fmt.Errorf("migration %q: %w", snippet, err)
 		}
 	}
 	return nil
@@ -99,7 +104,7 @@ func min(a, b int) int {
 	return b
 }
 
-// ── puppy_state ──────────────────────────────────────────────────────────────
+// ── puppy_state ───────────────────────────────────────────────────────────────
 
 func getState(db *sql.DB) (*PuppyState, error) {
 	var s PuppyState
@@ -118,8 +123,8 @@ func getState(db *sql.DB) (*PuppyState, error) {
 
 func setPhase(db *sql.DB, phase Phase) error {
 	_, err := db.Exec(
-		`UPDATE puppy_state SET phase = ?, phase_started_at = CURRENT_TIMESTAMP WHERE id = 1`,
-		phase,
+		`UPDATE puppy_state SET phase = ?, phase_started_at = ? WHERE id = 1`,
+		phase, nowUTC(),
 	)
 	return err
 }
@@ -127,17 +132,62 @@ func setPhase(db *sql.DB, phase Phase) error {
 // ── sessions ──────────────────────────────────────────────────────────────────
 
 func logWake(db *sql.DB, date string) error {
-	_, err := db.Exec(`INSERT INTO sessions (date, woke_at) VALUES (?, CURRENT_TIMESTAMP)`, date)
+	_, err := db.Exec(`INSERT INTO sessions (date, woke_at) VALUES (?, ?)`, date, nowUTC())
 	return err
 }
 
 func logSleep(db *sql.DB, date string) error {
 	_, err := db.Exec(`
-		UPDATE sessions SET slept_at = CURRENT_TIMESTAMP
-		WHERE id = (
-			SELECT id FROM sessions WHERE date = ? AND slept_at IS NULL ORDER BY id DESC LIMIT 1
-		)
-	`, date)
+		UPDATE sessions SET slept_at = ?
+		WHERE id = (SELECT id FROM sessions WHERE date = ? AND slept_at IS NULL ORDER BY id DESC LIMIT 1)
+	`, nowUTC(), date)
+	return err
+}
+
+func adjustWakeTime(db *sql.DB, date string, deltaMinutes int) error {
+	var wokeAtStr string
+	err := db.QueryRow(
+		`SELECT woke_at FROM sessions WHERE date = ? ORDER BY id DESC LIMIT 1`, date,
+	).Scan(&wokeAtStr)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	t, err := parseTimestamp(wokeAtStr)
+	if err != nil {
+		return err
+	}
+	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
+	_, err = db.Exec(`
+		UPDATE sessions SET woke_at = ?
+		WHERE id = (SELECT id FROM sessions WHERE date = ? ORDER BY id DESC LIMIT 1)
+	`, adjusted.UTC().Format("2006-01-02 15:04:05"), date)
+	return err
+}
+
+func adjustSleepTime(db *sql.DB, date string, deltaMinutes int) error {
+	var sleptAtStr sql.NullString
+	err := db.QueryRow(
+		`SELECT slept_at FROM sessions WHERE date = ? AND slept_at IS NOT NULL ORDER BY id DESC LIMIT 1`,
+		date,
+	).Scan(&sleptAtStr)
+	if err == sql.ErrNoRows || !sleptAtStr.Valid {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	t, err := parseTimestamp(sleptAtStr.String)
+	if err != nil {
+		return err
+	}
+	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
+	_, err = db.Exec(`
+		UPDATE sessions SET slept_at = ?
+		WHERE id = (SELECT id FROM sessions WHERE date = ? AND slept_at IS NOT NULL ORDER BY id DESC LIMIT 1)
+	`, adjusted.UTC().Format("2006-01-02 15:04:05"), date)
 	return err
 }
 
@@ -157,19 +207,151 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		if err := rows.Scan(&s.ID, &wokeAt, &sleptAt); err != nil {
 			return nil, err
 		}
-		t, err := parseTimestamp(wokeAt)
-		if err == nil {
+		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}
 		if sleptAt.Valid {
-			t2, err := parseTimestamp(sleptAt.String)
-			if err == nil {
-				s.SleptAt = &t2
+			if t, err := parseTimestamp(sleptAt.String); err == nil {
+				s.SleptAt = &t
 			}
 		}
 		sessions = append(sessions, s)
 	}
 	return sessions, rows.Err()
+}
+
+// ── routine_sessions ──────────────────────────────────────────────────────────
+
+func getRoutineSessions(db *sql.DB) ([]RoutineSession, error) {
+	rows, err := db.Query(
+		`SELECT id, position, label, activities FROM routine_sessions ORDER BY position ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []RoutineSession
+	for rows.Next() {
+		var s RoutineSession
+		var acts string
+		if err := rows.Scan(&s.ID, &s.Position, &s.Label, &acts); err != nil {
+			return nil, err
+		}
+		s.Activities = splitActivities(acts)
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
+
+func createRoutineSession(db *sql.DB) error {
+	var maxPos int
+	db.QueryRow(`SELECT COALESCE(MAX(position), 0) FROM routine_sessions`).Scan(&maxPos)
+	_, err := db.Exec(
+		`INSERT INTO routine_sessions (position, label, activities) VALUES (?, ?, ?)`,
+		maxPos+1, "New session", "",
+	)
+	return err
+}
+
+func updateRoutineSession(db *sql.DB, id int, label, activitiesText string) error {
+	_, err := db.Exec(
+		`UPDATE routine_sessions SET label = ?, activities = ? WHERE id = ?`,
+		strings.TrimSpace(label), activitiesText, id,
+	)
+	return err
+}
+
+func deleteRoutineSession(db *sql.DB, id int) error {
+	var pos int
+	if err := db.QueryRow(`SELECT position FROM routine_sessions WHERE id = ?`, id).Scan(&pos); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`DELETE FROM routine_sessions WHERE id = ?`, id); err != nil {
+		return err
+	}
+	_, err := db.Exec(`UPDATE routine_sessions SET position = position - 1 WHERE position > ?`, pos)
+	return err
+}
+
+func moveRoutineSession(db *sql.DB, id, dir int) error {
+	var pos int
+	if err := db.QueryRow(`SELECT position FROM routine_sessions WHERE id = ?`, id).Scan(&pos); err != nil {
+		return err
+	}
+	neighborPos := pos + dir
+	var neighborID int
+	err := db.QueryRow(`SELECT id FROM routine_sessions WHERE position = ?`, neighborPos).Scan(&neighborID)
+	if err == sql.ErrNoRows {
+		return nil // already at edge
+	}
+	if err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE routine_sessions SET position = ? WHERE id = ?`, neighborPos, id); err != nil {
+		tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE routine_sessions SET position = ? WHERE id = ?`, pos, neighborID); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// ── config ────────────────────────────────────────────────────────────────────
+
+func getConfig(db *sql.DB) (*Config, error) {
+	rows, err := db.Query(`SELECT key, value FROM config`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	c := &Config{PuppyName: "Nova", AwakeMinutes: 40, NapMinutes: 90}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		switch k {
+		case "puppy_name":
+			if v != "" {
+				c.PuppyName = v
+			}
+		case "awake_minutes":
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				c.AwakeMinutes = n
+			}
+		case "nap_minutes":
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				c.NapMinutes = n
+			}
+		}
+	}
+	return c, rows.Err()
+}
+
+func saveConfig(db *sql.DB, c *Config) error {
+	pairs := [][2]string{
+		{"puppy_name", c.PuppyName},
+		{"awake_minutes", strconv.Itoa(c.AwakeMinutes)},
+		{"nap_minutes", strconv.Itoa(c.NapMinutes)},
+	}
+	for _, kv := range pairs {
+		_, err := db.Exec(
+			`INSERT INTO config (key, value) VALUES (?, ?)
+			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+			kv[0], kv[1],
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ── meals ─────────────────────────────────────────────────────────────────────
@@ -208,15 +390,19 @@ func getMeals(db *sql.DB, date string) ([]MealEntry, error) {
 func setMeal(db *sql.DB, date string, mealType MealType, amount MealAmount) error {
 	_, err := db.Exec(`
 		INSERT INTO meals (date, meal_type, amount, updated_at)
-		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?)
 		ON CONFLICT(date, meal_type) DO UPDATE SET
 			amount     = excluded.amount,
 			updated_at = excluded.updated_at
-	`, date, mealType, amount)
+	`, date, mealType, amount, nowUTC())
 	return err
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+func nowUTC() string {
+	return time.Now().UTC().Format("2006-01-02 15:04:05")
+}
 
 func parseTimestamp(s string) (time.Time, error) {
 	t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.UTC)
@@ -224,4 +410,18 @@ func parseTimestamp(s string) (time.Time, error) {
 		return t, nil
 	}
 	return time.Parse(time.RFC3339, s)
+}
+
+func splitActivities(text string) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		if s := strings.TrimSpace(line); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func joinActivities(acts []string) string {
+	return strings.Join(acts, "\n")
 }

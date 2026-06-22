@@ -4,19 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PuppyFlow</title>
+    <title>Puppy Routine Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        canvas: '#F7F6F3',
-                    }
-                }
-            }
-        }
-    </script>
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
     <style>
         body { background-color: #F7F6F3; }
@@ -28,13 +17,12 @@
 
         <header class="flex items-center justify-between mb-5">
             <div>
-                <h1 class="text-lg font-semibold tracking-tight text-stone-800">PuppyFlow</h1>
-                <p class="text-xs text-stone-400">Nova · Duck Toller · 9 weeks</p>
+                <h1 class="text-lg font-semibold tracking-tight text-stone-800">Puppy Routine Tracker 🦆</h1>
+                <p class="text-xs text-stone-400">{{.Config.PuppyName}}</p>
             </div>
-            <span class="text-xl">🦆</span>
+            <a href="/settings" class="w-8 h-8 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors text-base">⚙</a>
         </header>
 
-        {{/* Polling container — updates every 2 s for the second owner's device */}}
         <div id="state-container"
              hx-get="/api/state"
              hx-trigger="every 2s"
