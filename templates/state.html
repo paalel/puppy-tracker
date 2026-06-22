@@ -221,12 +221,15 @@
                     class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
                     {{if eq .Toilet "accident"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
             </form>
-            <input type="text" name="comment" value="{{.Comment}}" placeholder="Add a note…"
+            <p class="text-xs text-stone-400 mt-2 mb-1">Comment</p>
+            <textarea name="comment" placeholder="Add a note…"
                 hx-post="/api/session/{{.ID}}/comment"
                 hx-target="#state-container"
                 hx-swap="innerHTML"
                 hx-trigger="change"
-                class="w-full mt-2 text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors">
+                oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+                rows="1"
+                class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.Comment}}</textarea>
             {{end}}
             {{else if .IsActive}}
             <p class="text-xs text-emerald-600 mt-0.5">Active now · since {{fmtTime .ActualWake}}</p>
@@ -283,4 +286,10 @@
     </div>
 </div>
 
+<script>
+document.querySelectorAll('textarea').forEach(function(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+});
+</script>
 {{end}}
