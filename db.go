@@ -27,6 +27,9 @@ var migration005SQL string
 //go:embed migrations/006_session_toilet.sql
 var migration006SQL string
 
+//go:embed migrations/007_sleep_interrupted.sql
+var migration007SQL string
+
 type Phase string
 
 const (
@@ -68,9 +71,10 @@ type DBSession struct {
 	WokeAt    *time.Time
 	SleptAt   *time.Time
 	Comment   string
-	SleepEase string // "", "easy", "ok", "hard"
-	Overtired bool
-	Toilet    string // "", "pee", "poop", "both", "nothing", "accident"
+	SleepEase        string // "", "easy", "ok", "hard"
+	Overtired        bool
+	SleepInterrupted bool
+	Toilet           string // "", "pee", "poop", "both", "nothing", "accident"
 }
 
 type DayStat struct {
@@ -111,7 +115,7 @@ var mealCatalog = []struct {
 }
 
 func initDB(db *sql.DB) error {
-	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL} {
+	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL} {
 		if err := runMigration(db, sql); err != nil {
 			return err
 		}
@@ -195,10 +199,14 @@ func adjustWakeTime(db *sql.DB, date string, deltaMinutes int) error {
 		return err
 	}
 	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
-	_, err = db.Exec(`
+	ts := adjusted.UTC().Format("2006-01-02 15:04:05")
+	if _, err = db.Exec(`
 		UPDATE sessions SET woke_at = ?
 		WHERE id = (SELECT id FROM sessions WHERE date = ? ORDER BY id DESC LIMIT 1)
-	`, adjusted.UTC().Format("2006-01-02 15:04:05"), date)
+	`, ts, date); err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE puppy_state SET phase_started_at = ?`, ts)
 	return err
 }
 
@@ -218,10 +226,14 @@ func adjustSleepTime(db *sql.DB, deltaMinutes int) error {
 		return err
 	}
 	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
-	_, err = db.Exec(`
+	ts := adjusted.UTC().Format("2006-01-02 15:04:05")
+	if _, err = db.Exec(`
 		UPDATE sessions SET slept_at = ?
 		WHERE id = (SELECT id FROM sessions WHERE slept_at IS NOT NULL ORDER BY id DESC LIMIT 1)
-	`, adjusted.UTC().Format("2006-01-02 15:04:05"))
+	`, ts); err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE puppy_state SET phase_started_at = ?`, ts)
 	return err
 }
 
@@ -257,6 +269,7 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		       COALESCE(comment, ''),
 		       COALESCE(sleep_ease, ''),
 		       COALESCE(overtired, 0),
+		       COALESCE(sleep_interrupted, 0),
 		       COALESCE(toilet, '')
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
@@ -270,10 +283,12 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var wokeAt string
 		var sleptAt sql.NullString
 		var overtiredInt int
-		if err := rows.Scan(&s.ID, &wokeAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &s.Toilet); err != nil {
+		var sleepInterruptedInt int
+		if err := rows.Scan(&s.ID, &wokeAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &s.Toilet); err != nil {
 			return nil, err
 		}
 		s.Overtired = overtiredInt == 1
+		s.SleepInterrupted = sleepInterruptedInt == 1
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}
@@ -295,6 +310,13 @@ func setSleepEase(db *sql.DB, id int, ease string) error {
 func toggleOvertired(db *sql.DB, id int) error {
 	_, err := db.Exec(
 		`UPDATE sessions SET overtired = CASE WHEN overtired = 1 THEN 0 ELSE 1 END WHERE id = ?`, id,
+	)
+	return err
+}
+
+func toggleSleepInterrupted(db *sql.DB, id int) error {
+	_, err := db.Exec(
+		`UPDATE sessions SET sleep_interrupted = CASE WHEN sleep_interrupted = 1 THEN 0 ELSE 1 END WHERE id = ?`, id,
 	)
 	return err
 }

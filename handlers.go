@@ -30,7 +30,6 @@ type PageData struct {
 	StartedAt      string
 	Sessions       []SessionView
 	Meals          []MealEntry
-	NightLock      bool
 	Config         *Config
 	LastWokeAt     *time.Time
 	LastSleptAt    *time.Time
@@ -81,8 +80,6 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 	}
 
 	elapsed := now.Sub(state.PhaseStartedAt.Local())
-	nightLock := now.Hour() > 22 || (now.Hour() == 22 && now.Minute() >= 15)
-
 	windDownThreshold := time.Duration(cfg.AwakeMinutes-15) * time.Minute
 	shouldWindDown := state.Phase == PhaseActive && elapsed >= windDownThreshold
 
@@ -107,7 +104,6 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 		StartedAt:      state.PhaseStartedAt.Local().Format("15:04"),
 		Sessions:       buildSchedule(today, dbSessions, routineSessions, cfg.AwakeMinutes, cfg.NapMinutes),
 		Meals:          meals,
-		NightLock:      nightLock,
 		Config:         cfg,
 		LastWokeAt:     lastWokeAt,
 		LastSleptAt:    lastSleptAt,
@@ -398,6 +394,20 @@ func (a *App) handleToggleOvertired(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := toggleOvertired(a.db, id); err != nil {
 		log.Printf("toggleOvertired: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
+}
+
+func (a *App) handleToggleSleepInterrupted(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := toggleSleepInterrupted(a.db, id); err != nil {
+		log.Printf("toggleSleepInterrupted: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

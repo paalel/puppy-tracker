@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN sleep_interrupted INTEGER NOT NULL DEFAULT 0;

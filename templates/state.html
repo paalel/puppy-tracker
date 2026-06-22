@@ -131,13 +131,6 @@
 </div>
 {{end}}
 
-{{/* ── Night Lock ───────────────────────────────────────────────────────────── */}}
-{{if .NightLock}}
-<div class="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 mb-4 text-sm text-rose-700">
-    🔒 <strong>Night lock</strong> — Remove water from crate. Sleep window: 23:00 – 09:00.
-</div>
-{{end}}
-
 {{/* ── Today's Schedule ─────────────────────────────────────────────────────── */}}
 <div class="bg-white rounded-2xl border border-stone-200 shadow-sm mb-4 overflow-hidden">
     <div class="px-4 pt-4 pb-3 border-b border-stone-100">
@@ -180,6 +173,9 @@
                 <span class="ml-auto {{.DurationClass}} text-xs font-medium">{{.ActualDuration}}</span>
                 {{end}}
             </div>
+            {{if .SleepDuration}}
+            <p class="text-xs text-indigo-400 mt-0.5 text-right">{{.SleepDuration}} nap</p>
+            {{end}}
             {{if .ID}}
             <p class="text-xs text-stone-400 mt-2 mb-1">Put to sleep</p>
             <div class="flex items-center gap-1">
@@ -194,11 +190,18 @@
                         class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
                         {{if eq .SleepEase "hard"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Hard</button>
                 </form>
-                <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML" class="ml-auto">
-                    <button type="submit" title="Toggle overtired"
-                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                        {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
-                </form>
+                <div class="ml-auto flex items-center gap-1">
+                    <form hx-post="/api/session/{{.ID}}/sleep-interrupted" hx-target="#state-container" hx-swap="innerHTML">
+                        <button type="submit" title="Toggle sleep interrupted"
+                            class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                            {{if .SleepInterrupted}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Interrupted</button>
+                    </form>
+                    <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML">
+                        <button type="submit" title="Toggle overtired"
+                            class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                            {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
+                    </form>
+                </div>
             </div>
             <p class="text-xs text-stone-400 mt-2 mb-1">Toilet</p>
             <form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
