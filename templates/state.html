@@ -3,7 +3,7 @@
 {{/* ── Current Phase Card ─────────────────────────────────────────────────── */}}
 
 {{if isPhase .Phase "SLEEPING"}}
-<div class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 mb-4">
+<div class="card p-5 mb-4">
     <div class="flex items-center gap-2 mb-1">
         <span class="w-2 h-2 rounded-full bg-indigo-300 flex-shrink-0"></span>
         <span class="text-xs font-semibold uppercase tracking-widest text-indigo-500">Sleeping</span>
@@ -31,27 +31,11 @@
         </button>
     </form>
 
-    {{/* Sleep time adjustment */}}
-    {{if .LastSleptAt}}
-    <div class="flex items-center gap-3 mt-4 pt-4 border-t border-stone-100">
-        <span class="text-xs text-stone-400 flex-1">Went to sleep at {{fmtTime .LastSleptAt}}</span>
-        <div class="flex items-center gap-1">
-            <form hx-post="/api/sleep-adjust" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="delta" value="-5" type="submit"
-                    class="w-9 h-8 rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold hover:bg-stone-200 active:bg-stone-300 transition-colors select-none">−</button>
-            </form>
-            <span class="text-xs text-stone-400 px-1">5 min</span>
-            <form hx-post="/api/sleep-adjust" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="delta" value="5" type="submit"
-                    class="w-9 h-8 rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold hover:bg-stone-200 active:bg-stone-300 transition-colors select-none">+</button>
-            </form>
-        </div>
-    </div>
-    {{end}}
+    {{template "time-adjust" dict "Endpoint" "/api/sleep-adjust" "Label" "Went to sleep at" "Time" .LastSleptAt}}
 </div>
 
 {{else}}
-<div class="bg-white rounded-2xl border {{if .ShouldWindDown}}border-amber-200{{else}}border-emerald-200{{end}} shadow-sm p-5 mb-4">
+<div class="card {{if .ShouldWindDown}}border-amber-200{{else}}border-emerald-200{{end}} p-5 mb-4">
     <div class="flex items-center gap-2 mb-1">
         <span class="w-2 h-2 rounded-full {{if .ShouldWindDown}}bg-amber-400{{else}}bg-emerald-400{{end}} flex-shrink-0"></span>
         <span class="text-xs font-semibold uppercase tracking-widest {{if .ShouldWindDown}}text-amber-600{{else}}text-emerald-600{{end}}">Active</span>
@@ -91,50 +75,19 @@
 
     {{with currentSession .Sessions}}{{if .ID}}
     <div class="mt-4 pt-4 border-t border-stone-100">
-        <p class="text-xs text-stone-400 mb-2">Toilet</p>
-        <form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
-            <button name="value" value="pee" type="submit"
-                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                {{if eq .Toilet "pee"}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pee</button>
-            <button name="value" value="poop" type="submit"
-                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                {{if eq .Toilet "poop"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Poop</button>
-            <button name="value" value="both" type="submit"
-                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                {{if eq .Toilet "both"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Both</button>
-            <button name="value" value="nothing" type="submit"
-                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                {{if eq .Toilet "nothing"}}bg-stone-300 text-stone-600 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Nope</button>
-            <button name="value" value="accident" type="submit"
-                class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                {{if eq .Toilet "accident"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
-        </form>
+        <p class="section-label">Toilet</p>
+        {{template "toilet-buttons" .}}
     </div>
     {{end}}{{end}}
 
-    {{if .LastWokeAt}}
-    <div class="flex items-center gap-3 mt-4 pt-4 border-t border-stone-100">
-        <span class="text-xs text-stone-400 flex-1">Woke up at {{fmtTime .LastWokeAt}}</span>
-        <div class="flex items-center gap-1">
-            <form hx-post="/api/wake-adjust" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="delta" value="-5" type="submit"
-                    class="w-9 h-8 rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold hover:bg-stone-200 active:bg-stone-300 transition-colors select-none">−</button>
-            </form>
-            <span class="text-xs text-stone-400 px-1">5 min</span>
-            <form hx-post="/api/wake-adjust" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="delta" value="5" type="submit"
-                    class="w-9 h-8 rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold hover:bg-stone-200 active:bg-stone-300 transition-colors select-none">+</button>
-            </form>
-        </div>
-    </div>
-    {{end}}
+    {{template "time-adjust" dict "Endpoint" "/api/wake-adjust" "Label" "Woke up at" "Time" .LastWokeAt}}
 </div>
 {{end}}
 
 {{/* ── Today's Schedule ─────────────────────────────────────────────────────── */}}
-<div class="bg-white rounded-2xl border border-stone-200 shadow-sm mb-4 overflow-hidden">
+<div class="card mb-4 overflow-hidden">
     <div class="px-4 pt-4 pb-3 border-b border-stone-100">
-        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Today's Schedule</h2>
+        <h2 class="card-heading">Today's Schedule</h2>
     </div>
     <div class="divide-y divide-stone-50">
     {{range .Sessions}}
@@ -177,51 +130,30 @@
             <p class="text-xs text-indigo-400 mt-0.5 text-right">{{.SleepDuration}} nap</p>
             {{end}}
             {{if .ID}}
-            <p class="text-xs text-stone-400 mt-2 mb-1">Put to sleep</p>
+            <p class="section-label">Put to sleep</p>
             <div class="flex items-center gap-1">
                 <form class="contents" hx-post="/api/session/{{.ID}}/sleep-ease" hx-target="#state-container" hx-swap="innerHTML">
                     <button name="value" value="easy" title="Easy to settle"
-                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                        {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Easy</button>
+                        class="btn-badge {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Easy</button>
                     <button name="value" value="ok" title="Took some time"
-                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                        {{if eq .SleepEase "ok"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">OK</button>
+                        class="btn-badge {{if eq .SleepEase "ok"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">OK</button>
                     <button name="value" value="hard" title="Struggled to settle"
-                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                        {{if eq .SleepEase "hard"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Hard</button>
+                        class="btn-badge {{if eq .SleepEase "hard"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Hard</button>
                 </form>
                 <div class="ml-auto flex items-center gap-1">
                     <form hx-post="/api/session/{{.ID}}/sleep-interrupted" hx-target="#state-container" hx-swap="innerHTML">
                         <button type="submit" title="Toggle sleep interrupted"
-                            class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                            {{if .SleepInterrupted}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Interrupted</button>
+                            class="btn-badge {{if .SleepInterrupted}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Interrupted</button>
                     </form>
                     <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML">
                         <button type="submit" title="Toggle overtired"
-                            class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                            {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
+                            class="btn-badge {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
                     </form>
                 </div>
             </div>
-            <p class="text-xs text-stone-400 mt-2 mb-1">Toilet</p>
-            <form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="value" value="pee" type="submit"
-                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                    {{if eq .Toilet "pee"}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pee</button>
-                <button name="value" value="poop" type="submit"
-                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                    {{if eq .Toilet "poop"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Poop</button>
-                <button name="value" value="both" type="submit"
-                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                    {{if eq .Toilet "both"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Both</button>
-                <button name="value" value="nothing" type="submit"
-                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                    {{if eq .Toilet "nothing"}}bg-stone-300 text-stone-600 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Nope</button>
-                <button name="value" value="accident" type="submit"
-                    class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
-                    {{if eq .Toilet "accident"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
-            </form>
-            <p class="text-xs text-stone-400 mt-2 mb-1">Comment</p>
+            <p class="section-label">Toilet</p>
+            {{template "toilet-buttons" .}}
+            <p class="section-label">Comment</p>
             <textarea name="comment" placeholder="Add a note…"
                 hx-post="/api/session/{{.ID}}/comment"
                 hx-target="#state-container"
@@ -243,9 +175,9 @@
 </div>
 
 {{/* ── Meals ────────────────────────────────────────────────────────────────── */}}
-<div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden mb-4">
+<div class="card overflow-hidden mb-4">
     <div class="px-4 pt-4 pb-3 border-b border-stone-100">
-        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Meals</h2>
+        <h2 class="card-heading">Meals</h2>
     </div>
     <div class="divide-y divide-stone-50">
     {{range .Meals}}
@@ -261,24 +193,16 @@
                 <input type="hidden" name="meal" value="{{.Type}}">
                 <button name="amount" value="nothing" type="submit"
                     class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "nothing"}}bg-stone-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
-                    None
-                </button>
+                    {{if isSelected .Amount "nothing"}}bg-stone-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">None</button>
                 <button name="amount" value="too_little" type="submit"
                     class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "too_little"}}bg-amber-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
-                    Little
-                </button>
+                    {{if isSelected .Amount "too_little"}}bg-amber-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">Little</button>
                 <button name="amount" value="pretty_good" type="submit"
                     class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "pretty_good"}}bg-sky-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
-                    Good
-                </button>
+                    {{if isSelected .Amount "pretty_good"}}bg-sky-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">Good</button>
                 <button name="amount" value="full_meal" type="submit"
                     class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "full_meal"}}bg-emerald-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">
-                    Full
-                </button>
+                    {{if isSelected .Amount "full_meal"}}bg-emerald-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">Full</button>
             </form>
         </div>
     </div>

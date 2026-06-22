@@ -183,6 +183,20 @@ func parseTemplates() (*template.Template, error) {
 				return "text-rose-500"
 			}
 		},
+		"dict": func(pairs ...any) (map[string]any, error) {
+			if len(pairs)%2 != 0 {
+				return nil, fmt.Errorf("dict requires an even number of arguments")
+			}
+			m := make(map[string]any, len(pairs)/2)
+			for i := 0; i < len(pairs); i += 2 {
+				key, ok := pairs[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict keys must be strings")
+				}
+				m[key] = pairs[i+1]
+			}
+			return m, nil
+		},
 	}
 	return template.New("").Funcs(funcs).ParseFS(templateFS, "templates/*.html")
 }

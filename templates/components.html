@@ -1,0 +1,53 @@
+{{define "styles"}}
+<style type="text/tailwindcss">
+    @layer base {
+        body { background-color: #F7F6F3; }
+        * { -webkit-tap-highlight-color: transparent; }
+    }
+    @layer components {
+        .btn-badge {
+            @apply px-3 py-1.5 text-xs rounded-lg transition-colors select-none;
+        }
+        .card {
+            @apply bg-white rounded-2xl border border-stone-200 shadow-sm;
+        }
+        .section-label {
+            @apply text-xs text-stone-400 mt-2 mb-1;
+        }
+        .card-heading {
+            @apply text-xs font-semibold uppercase tracking-widest text-stone-400;
+        }
+    }
+</style>
+{{end}}
+
+{{define "toilet-buttons"}}
+{{/* expects a SessionView with .ID and .Toilet */}}
+<form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
+    <button name="value" value="pee"      type="submit" class="btn-badge {{if eq .Toilet "pee"}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pee</button>
+    <button name="value" value="poop"     type="submit" class="btn-badge {{if eq .Toilet "poop"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Poop</button>
+    <button name="value" value="both"     type="submit" class="btn-badge {{if eq .Toilet "both"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Both</button>
+    <button name="value" value="nothing"  type="submit" class="btn-badge {{if eq .Toilet "nothing"}}bg-stone-300 text-stone-600 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Nope</button>
+    <button name="value" value="accident" type="submit" class="btn-badge {{if eq .Toilet "accident"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
+</form>
+{{end}}
+
+{{define "time-adjust"}}
+{{/* expects dict with Endpoint string, Label string, Time *time.Time */}}
+{{if .Time}}
+<div class="flex items-center gap-3 mt-4 pt-4 border-t border-stone-100">
+    <span class="text-xs text-stone-400 flex-1">{{.Label}} {{fmtTime .Time}}</span>
+    <div class="flex items-center gap-1">
+        <form hx-post="{{.Endpoint}}" hx-target="#state-container" hx-swap="innerHTML">
+            <button name="delta" value="-5" type="submit"
+                class="w-9 h-8 rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold hover:bg-stone-200 active:bg-stone-300 transition-colors select-none">−</button>
+        </form>
+        <span class="text-xs text-stone-400 px-1">5 min</span>
+        <form hx-post="{{.Endpoint}}" hx-target="#state-container" hx-swap="innerHTML">
+            <button name="delta" value="5" type="submit"
+                class="w-9 h-8 rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold hover:bg-stone-200 active:bg-stone-300 transition-colors select-none">+</button>
+        </form>
+    </div>
+</div>
+{{end}}
+{{end}}
