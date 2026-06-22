@@ -17,7 +17,7 @@
         <header class="flex items-center justify-between mb-6">
             <div>
                 <h1 class="text-lg font-semibold tracking-tight text-stone-800">Stats</h1>
-                <p class="text-xs text-stone-400">{{.Config.PuppyName}} · target {{.Config.AwakeMinutes}}m awake</p>
+                <p class="text-xs text-stone-400">{{.Config.PuppyName}} · target {{.Config.AwakeMinutes}}m awake · {{.Config.NapMinutes}}m nap</p>
             </div>
             <a href="/" class="text-sm text-stone-400 hover:text-stone-600 transition-colors">← Back</a>
         </header>
@@ -46,19 +46,30 @@
                     <p class="text-base font-semibold {{.AvgClass}}">{{.AvgAwakeMins}}m</p>
                 </div>
                 <div>
-                    <p class="text-xs text-stone-400 mb-0.5">First wake</p>
-                    <p class="text-base font-semibold text-stone-700">{{fmtTime .FirstWake}}</p>
+                    <p class="text-xs text-stone-400 mb-0.5">Avg nap</p>
+                    <p class="text-base font-semibold text-indigo-500">{{if .AvgNapMins}}{{.AvgNapMins}}m{{else}}–{{end}}</p>
                 </div>
             </div>
-            {{if .LastSleep}}
-            <p class="text-xs text-stone-400 mt-2 pt-2 border-t border-stone-100">Last sleep {{fmtTime .LastSleep}}</p>
-            {{end}}
-            {{if or .EasyCount .OkCount .HardCount .OvertiredCount}}
-            <div class="flex items-center gap-2 mt-2 {{if not .LastSleep}}pt-2 border-t border-stone-100{{end}}">
+            <div class="grid grid-cols-2 gap-3 mt-3 pt-2 border-t border-stone-100">
+                <div>
+                    <p class="text-xs text-stone-400 mb-0.5">First wake</p>
+                    <p class="text-sm font-semibold text-stone-700">{{fmtTime .FirstWake}}</p>
+                </div>
+                {{if .LastSleep}}
+                <div>
+                    <p class="text-xs text-stone-400 mb-0.5">Went to bed</p>
+                    <p class="text-sm font-semibold text-stone-700">{{fmtTime .LastSleep}}</p>
+                </div>
+                {{end}}
+            </div>
+            {{if or .EasyCount .OkCount .HardCount .OvertiredCount .InterruptedCount .AccidentCount}}
+            <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mt-2 pt-2 border-t border-stone-100">
                 {{if .EasyCount}}<span class="text-xs text-emerald-600">{{.EasyCount}}× easy</span>{{end}}
                 {{if .OkCount}}<span class="text-xs text-amber-600">{{.OkCount}}× ok</span>{{end}}
                 {{if .HardCount}}<span class="text-xs text-rose-600">{{.HardCount}}× hard</span>{{end}}
-                {{if .OvertiredCount}}<span class="text-xs text-rose-600 ml-auto">{{.OvertiredCount}}× overtired</span>{{end}}
+                {{if .InterruptedCount}}<span class="text-xs text-amber-600">{{.InterruptedCount}}× interrupted</span>{{end}}
+                {{if .OvertiredCount}}<span class="text-xs text-rose-600">{{.OvertiredCount}}× overtired</span>{{end}}
+                {{if .AccidentCount}}<span class="text-xs text-rose-700 font-medium ml-auto">{{.AccidentCount}}× accident</span>{{end}}
             </div>
             {{end}}
         </div>

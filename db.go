@@ -78,17 +78,20 @@ type DBSession struct {
 }
 
 type DayStat struct {
-	Date           string
-	DateLabel      string
-	Cycles         int
-	AvgAwakeMins   int
-	FirstWake      *time.Time
-	LastSleep      *time.Time
-	AvgClass       string
-	EasyCount      int
-	OkCount        int
-	HardCount      int
-	OvertiredCount int
+	Date             string
+	DateLabel        string
+	Cycles           int
+	AvgAwakeMins     int
+	AvgNapMins       int
+	FirstWake        *time.Time
+	LastSleep        *time.Time
+	AvgClass         string
+	EasyCount        int
+	OkCount          int
+	HardCount        int
+	OvertiredCount   int
+	InterruptedCount int
+	AccidentCount    int
 }
 
 type Config struct {
@@ -371,10 +374,12 @@ func getDayStats(db *sql.DB, awakeMins int) ([]DayStat, error) {
 			CAST(AVG(strftime('%s', slept_at) - strftime('%s', woke_at)) AS INTEGER) AS avg_awake_secs,
 			MIN(woke_at) AS first_wake,
 			MAX(slept_at) AS last_sleep,
-			SUM(CASE WHEN sleep_ease = 'easy' THEN 1 ELSE 0 END) AS easy_count,
-			SUM(CASE WHEN sleep_ease = 'ok'   THEN 1 ELSE 0 END) AS ok_count,
-			SUM(CASE WHEN sleep_ease = 'hard' THEN 1 ELSE 0 END) AS hard_count,
-			SUM(CASE WHEN overtired = 1       THEN 1 ELSE 0 END) AS overtired_count
+			SUM(CASE WHEN sleep_ease = 'easy'    THEN 1 ELSE 0 END) AS easy_count,
+			SUM(CASE WHEN sleep_ease = 'ok'      THEN 1 ELSE 0 END) AS ok_count,
+			SUM(CASE WHEN sleep_ease = 'hard'    THEN 1 ELSE 0 END) AS hard_count,
+			SUM(CASE WHEN overtired = 1          THEN 1 ELSE 0 END) AS overtired_count,
+			SUM(CASE WHEN sleep_interrupted = 1  THEN 1 ELSE 0 END) AS interrupted_count,
+			SUM(CASE WHEN toilet = 'accident'    THEN 1 ELSE 0 END) AS accident_count
 		FROM sessions
 		WHERE slept_at IS NOT NULL
 		GROUP BY date
@@ -396,7 +401,8 @@ func getDayStats(db *sql.DB, awakeMins int) ([]DayStat, error) {
 		var avgSecs int
 		var firstWake, lastSleep string
 		if err := rows.Scan(&d.Date, &d.Cycles, &avgSecs, &firstWake, &lastSleep,
-			&d.EasyCount, &d.OkCount, &d.HardCount, &d.OvertiredCount); err != nil {
+			&d.EasyCount, &d.OkCount, &d.HardCount, &d.OvertiredCount,
+			&d.InterruptedCount, &d.AccidentCount); err != nil {
 			return nil, err
 		}
 
@@ -439,7 +445,57 @@ func getDayStats(db *sql.DB, awakeMins int) ([]DayStat, error) {
 
 		days = append(days, d)
 	}
-	return days, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Compute avg nap duration (gap between consecutive sessions on the same day).
+	napRows, err := db.Query(`
+		SELECT date, CAST(AVG(nap_secs) AS INTEGER) FROM (
+			SELECT s1.date,
+			       CAST(strftime('%s', s2.woke_at) AS INTEGER) - CAST(strftime('%s', s1.slept_at) AS INTEGER) AS nap_secs
+			FROM sessions s1
+			INNER JOIN sessions s2
+			       ON  s2.date = s1.date
+			       AND s2.id   = (SELECT MIN(id) FROM sessions WHERE date = s1.date AND id > s1.id AND woke_at IS NOT NULL)
+			WHERE s1.slept_at IS NOT NULL AND nap_secs > 0
+		) GROUP BY date
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer napRows.Close()
+	napMins := make(map[string]int)
+	for napRows.Next() {
+		var date string
+		var secs int
+		if err := napRows.Scan(&date, &secs); err != nil {
+			return nil, err
+		}
+		napMins[date] = secs / 60
+	}
+	if err := napRows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range days {
+		days[i].AvgNapMins = napMins[days[i].Date]
+	}
+
+	// For today, only show LastSleep ("Went to bed") once all routine sessions are
+	// completed — otherwise it would show a mid-day nap time as bedtime.
+	var routineCount, completedToday int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM routine_sessions`).Scan(&routineCount)
+	_ = db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE date = ? AND slept_at IS NOT NULL`, today).Scan(&completedToday)
+	if completedToday < routineCount {
+		for i := range days {
+			if days[i].Date == today {
+				days[i].LastSleep = nil
+				break
+			}
+		}
+	}
+
+	return days, nil
 }
 
 func setSessionToilet(db *sql.DB, id int, value string) error {
