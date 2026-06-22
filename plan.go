@@ -61,10 +61,12 @@ type SessionView struct {
 	IsFuture       bool
 	ActualDuration string
 	DurationClass  string
-	Comment        string
-	SleepEase      string
-	Overtired      bool
-	Toilet         string
+	Comment          string
+	SleepEase        string
+	Overtired        bool
+	SleepInterrupted bool
+	Toilet           string
+	SleepDuration    string
 }
 
 // buildSchedule constructs the day's session list with planned times adjusted
@@ -126,33 +128,44 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 
 		var id int
 		var comment, sleepEase, toilet string
-		var overtired bool
+		var overtired, sleepInterrupted bool
 		if i < len(dbSessions) {
 			id = dbSessions[i].ID
 			comment = dbSessions[i].Comment
 			sleepEase = dbSessions[i].SleepEase
 			overtired = dbSessions[i].Overtired
+			sleepInterrupted = dbSessions[i].SleepInterrupted
 			toilet = dbSessions[i].Toilet
 		}
 
 		views[i] = SessionView{
-			ID:             id,
-			Index:          i,
-			Label:          rs.Label,
-			Activities:     rs.Activities,
-			PlannedWake:    plannedWake,
-			PlannedSleep:   plannedWake.Add(awake),
-			ActualWake:     aw,
-			ActualSleep:    as,
-			IsPast:         as != nil,
-			IsActive:       aw != nil && as == nil,
-			IsFuture:       aw == nil,
-			ActualDuration: actualDuration,
-			DurationClass:  durationClass,
-			Comment:        comment,
-			SleepEase:      sleepEase,
-			Overtired:      overtired,
-			Toilet:         toilet,
+			ID:               id,
+			Index:            i,
+			Label:            rs.Label,
+			Activities:       rs.Activities,
+			PlannedWake:      plannedWake,
+			PlannedSleep:     plannedWake.Add(awake),
+			ActualWake:       aw,
+			ActualSleep:      as,
+			IsPast:           as != nil,
+			IsActive:         aw != nil && as == nil,
+			IsFuture:         aw == nil,
+			ActualDuration:   actualDuration,
+			DurationClass:    durationClass,
+			Comment:          comment,
+			SleepEase:        sleepEase,
+			Overtired:        overtired,
+			SleepInterrupted: sleepInterrupted,
+			Toilet:           toilet,
+		}
+	}
+
+	for i := 0; i < len(views)-1; i++ {
+		if views[i].ActualSleep != nil && views[i+1].ActualWake != nil {
+			d := views[i+1].ActualWake.Sub(*views[i].ActualSleep)
+			if d > 0 {
+				views[i].SleepDuration = formatDuration(d)
+			}
 		}
 	}
 
