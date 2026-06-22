@@ -122,15 +122,15 @@
     </div>
     <div class="divide-y divide-stone-50">
     {{range .Sessions}}
-    <div class="px-4 py-3 flex items-start gap-3 {{if .IsActive}}bg-emerald-50{{end}} {{if .IsPast}}opacity-50{{end}}">
+    <div class="px-4 py-3 flex items-start gap-3 {{if .IsActive}}bg-emerald-50{{else if .IsPast}}bg-stone-50{{end}}">
         <div class="w-4 flex-shrink-0 pt-0.5 text-center">
-            {{if .IsPast}}<span class="text-xs text-stone-400">✓</span>
+            {{if .IsPast}}<span class="text-xs text-emerald-500">✓</span>
             {{else if .IsActive}}<span class="text-xs text-emerald-500">▶</span>
             {{else}}<span class="text-xs text-stone-300">○</span>{{end}}
         </div>
         <div class="min-w-0 flex-1">
             <div class="flex items-baseline justify-between gap-2">
-                <span class="text-sm font-medium text-stone-700">{{.Label}}</span>
+                <span class="text-sm font-medium {{if .IsPast}}text-stone-500{{else}}text-stone-700{{end}}">{{.Label}}</span>
                 <span class="text-xs font-mono text-stone-400 flex-shrink-0">
                     {{if .ActualWake}}{{fmtTime .ActualWake}}{{else}}~{{fmtPlan .PlannedWake}}{{end}}
                 </span>
@@ -140,6 +140,33 @@
                 Woke {{fmtTime .ActualWake}}{{if .ActualSleep}} · Slept {{fmtTime .ActualSleep}}{{end}}
                 {{if .ActualDuration}} · <span class="{{.DurationClass}} font-medium">{{.ActualDuration}}</span>{{end}}
             </p>
+            {{if .ID}}
+            <div class="flex items-center gap-1 mt-2">
+                <span class="text-xs text-stone-300 mr-0.5">Sleep</span>
+                <form class="contents" hx-post="/api/session/{{.ID}}/sleep-ease" hx-target="#state-container" hx-swap="innerHTML">
+                    <button name="value" value="easy" title="Easy to settle"
+                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                        {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Easy</button>
+                    <button name="value" value="ok" title="Took some time"
+                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                        {{if eq .SleepEase "ok"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">OK</button>
+                    <button name="value" value="hard" title="Struggled to settle"
+                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                        {{if eq .SleepEase "hard"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Hard</button>
+                </form>
+                <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML" class="ml-auto">
+                    <button type="submit" title="Toggle overtired"
+                        class="px-3 py-1.5 text-xs rounded-lg transition-colors select-none
+                        {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
+                </form>
+            </div>
+            <input type="text" name="comment" value="{{.Comment}}" placeholder="Add a note…"
+                hx-post="/api/session/{{.ID}}/comment"
+                hx-target="#state-container"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                class="w-full mt-1.5 text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors">
+            {{end}}
             {{else if .IsActive}}
             <p class="text-xs text-emerald-600 mt-0.5">Active now · since {{fmtTime .ActualWake}}</p>
             {{else}}

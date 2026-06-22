@@ -35,9 +35,18 @@ type SettingsData struct {
 	RoutineSessions []RoutineSession
 }
 
+type StatsData struct {
+	Days   []DayStat
+	Config *Config
+}
+
 func buildPageData(db *sql.DB) (*PageData, error) {
 	now := time.Now()
 	today := now.Format("2006-01-02")
+
+	if err := closeStaleSession(db); err != nil {
+		log.Printf("closeStaleSession: %v", err)
+	}
 
 	state, err := getState(db)
 	if err != nil {
@@ -223,6 +232,10 @@ func (a *App) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -255,7 +268,7 @@ func (a *App) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case PhaseSleeping:
-		if err := logSleep(a.db, today); err != nil {
+		if err := logSleep(a.db); err != nil {
 			log.Printf("logSleep: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -329,9 +342,86 @@ func (a *App) handleAdjustSleep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid delta", http.StatusBadRequest)
 		return
 	}
-	today := time.Now().Format("2006-01-02")
-	if err := adjustSleepTime(a.db, today, delta); err != nil {
+	if err := adjustSleepTime(a.db, delta); err != nil {
 		log.Printf("adjustSleepTime: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
+}
+
+// ── stats ─────────────────────────────────────────────────────────────────────
+
+func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
+	cfg, err := getConfig(a.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	days, err := getDayStats(a.db, cfg.AwakeMinutes)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := a.tmpl.ExecuteTemplate(w, "stats-page", &StatsData{Days: days, Config: cfg}); err != nil {
+		log.Printf("stats template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (a *App) handleSetSleepEase(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	ease := r.FormValue("value")
+	switch ease {
+	case "easy", "ok", "hard":
+	default:
+		http.Error(w, "invalid value", http.StatusBadRequest)
+		return
+	}
+	if err := setSleepEase(a.db, id, ease); err != nil {
+		log.Printf("setSleepEase: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
+}
+
+func (a *App) handleToggleOvertired(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := toggleOvertired(a.db, id); err != nil {
+		log.Printf("toggleOvertired: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
+}
+
+func (a *App) handleSetSessionComment(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	comment := strings.TrimSpace(r.FormValue("comment"))
+	if err := setSessionComment(a.db, id, comment); err != nil {
+		log.Printf("setSessionComment: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

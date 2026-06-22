@@ -20,12 +20,15 @@
                 <h1 class="text-lg font-semibold tracking-tight text-stone-800">Puppy Routine Tracker 🦆</h1>
                 <p class="text-xs text-stone-400">{{.Config.PuppyName}}</p>
             </div>
-            <a href="/settings" class="w-8 h-8 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors text-base">⚙</a>
+            <div class="flex items-center gap-1">
+                <a href="/stats" title="Stats" class="w-8 h-8 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors text-base">◈</a>
+                <a href="/settings" title="Settings" class="w-8 h-8 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors text-base">⚙</a>
+            </div>
         </header>
 
         <div id="state-container"
              hx-get="/api/state"
-             hx-trigger="every 2s"
+             hx-trigger="every 2s [!document.querySelector('#state-container input:focus, #state-container textarea:focus')]"
              hx-swap="innerHTML">
             {{template "state" .}}
         </div>

@@ -1,0 +1,2 @@
+ALTER TABLE sessions ADD COLUMN sleep_ease TEXT;
+ALTER TABLE sessions ADD COLUMN overtired INTEGER NOT NULL DEFAULT 0;

@@ -48,6 +48,7 @@ var dailyPlan = []SessionTemplate{
 var baseWakeTimes = []string{"09:00"}
 
 type SessionView struct {
+	ID             int
 	Index          int
 	Label          string
 	Activities     []string
@@ -58,8 +59,11 @@ type SessionView struct {
 	IsPast         bool
 	IsActive       bool
 	IsFuture       bool
-	ActualDuration string // e.g. "45m" or "1h 5m" — only set for past sessions
-	DurationClass  string // Tailwind color class based on delta from target
+	ActualDuration string
+	DurationClass  string
+	Comment        string
+	SleepEase      string
+	Overtired      bool
 }
 
 // buildSchedule constructs the day's session list with planned times adjusted
@@ -119,7 +123,18 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			}
 		}
 
+		var id int
+		var comment, sleepEase string
+		var overtired bool
+		if i < len(dbSessions) {
+			id = dbSessions[i].ID
+			comment = dbSessions[i].Comment
+			sleepEase = dbSessions[i].SleepEase
+			overtired = dbSessions[i].Overtired
+		}
+
 		views[i] = SessionView{
+			ID:             id,
 			Index:          i,
 			Label:          rs.Label,
 			Activities:     rs.Activities,
@@ -132,6 +147,9 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			IsFuture:       aw == nil,
 			ActualDuration: actualDuration,
 			DurationClass:  durationClass,
+			Comment:        comment,
+			SleepEase:      sleepEase,
+			Overtired:      overtired,
 		}
 	}
 

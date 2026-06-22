@@ -10,7 +10,13 @@ import (
 )
 
 //go:embed migrations/001_initial.sql
-var migrationSQL string
+var migration001SQL string
+
+//go:embed migrations/002_session_comments.sql
+var migration002SQL string
+
+//go:embed migrations/003_session_sleep_metrics.sql
+var migration003SQL string
 
 type Phase string
 
@@ -49,9 +55,26 @@ type MealEntry struct {
 }
 
 type DBSession struct {
-	ID      int
-	WokeAt  *time.Time
-	SleptAt *time.Time
+	ID        int
+	WokeAt    *time.Time
+	SleptAt   *time.Time
+	Comment   string
+	SleepEase string // "", "easy", "ok", "hard"
+	Overtired bool
+}
+
+type DayStat struct {
+	Date           string
+	DateLabel      string
+	Cycles         int
+	AvgAwakeMins   int
+	FirstWake      *time.Time
+	LastSleep      *time.Time
+	AvgClass       string
+	EasyCount      int
+	OkCount        int
+	HardCount      int
+	OvertiredCount int
 }
 
 type Config struct {
@@ -77,16 +100,25 @@ var mealCatalog = []struct {
 	{MealDinner, "Dinner", "19:00"},
 }
 
-// initDB runs the embedded migration SQL. Every statement is idempotent
-// (IF NOT EXISTS / INSERT OR IGNORE), so this is safe to call on an
-// existing database.
 func initDB(db *sql.DB) error {
-	for _, stmt := range strings.Split(migrationSQL, ";") {
+	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL} {
+		if err := runMigration(db, sql); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runMigration(db *sql.DB, sql string) error {
+	for _, stmt := range strings.Split(sql, ";") {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue
 		}
 		if _, err := db.Exec(stmt); err != nil {
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue // ALTER TABLE ADD COLUMN on a column that already exists
+			}
 			snippet := stmt
 			if len(snippet) > 60 {
 				snippet = snippet[:60]
@@ -136,11 +168,11 @@ func logWake(db *sql.DB, date string) error {
 	return err
 }
 
-func logSleep(db *sql.DB, date string) error {
+func logSleep(db *sql.DB) error {
 	_, err := db.Exec(`
 		UPDATE sessions SET slept_at = ?
-		WHERE id = (SELECT id FROM sessions WHERE date = ? AND slept_at IS NULL ORDER BY id DESC LIMIT 1)
-	`, nowUTC(), date)
+		WHERE id = (SELECT id FROM sessions WHERE slept_at IS NULL ORDER BY id DESC LIMIT 1)
+	`, nowUTC())
 	return err
 }
 
@@ -167,11 +199,10 @@ func adjustWakeTime(db *sql.DB, date string, deltaMinutes int) error {
 	return err
 }
 
-func adjustSleepTime(db *sql.DB, date string, deltaMinutes int) error {
+func adjustSleepTime(db *sql.DB, deltaMinutes int) error {
 	var sleptAtStr sql.NullString
 	err := db.QueryRow(
-		`SELECT slept_at FROM sessions WHERE date = ? AND slept_at IS NOT NULL ORDER BY id DESC LIMIT 1`,
-		date,
+		`SELECT slept_at FROM sessions WHERE slept_at IS NOT NULL ORDER BY id DESC LIMIT 1`,
 	).Scan(&sleptAtStr)
 	if err == sql.ErrNoRows || !sleptAtStr.Valid {
 		return nil
@@ -186,14 +217,44 @@ func adjustSleepTime(db *sql.DB, date string, deltaMinutes int) error {
 	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
 	_, err = db.Exec(`
 		UPDATE sessions SET slept_at = ?
-		WHERE id = (SELECT id FROM sessions WHERE date = ? AND slept_at IS NOT NULL ORDER BY id DESC LIMIT 1)
-	`, adjusted.UTC().Format("2006-01-02 15:04:05"), date)
+		WHERE id = (SELECT id FROM sessions WHERE slept_at IS NOT NULL ORDER BY id DESC LIMIT 1)
+	`, adjusted.UTC().Format("2006-01-02 15:04:05"))
 	return err
 }
 
+// closeStaleSession closes any open session from a previous calendar day by
+// capping slept_at at 23:59:59 of that day, then sets phase to SLEEPING.
+// This handles the case where the user never pressed "Put to Sleep" before midnight.
+func closeStaleSession(db *sql.DB) error {
+	var id int
+	var dateStr string
+	err := db.QueryRow(
+		`SELECT id, date FROM sessions WHERE slept_at IS NULL ORDER BY id DESC LIMIT 1`,
+	).Scan(&id, &dateStr)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	today := time.Now().Format("2006-01-02")
+	if dateStr >= today {
+		return nil
+	}
+	closeAt := dateStr + " 23:59:59"
+	if _, err := db.Exec(`UPDATE sessions SET slept_at = ? WHERE id = ?`, closeAt, id); err != nil {
+		return err
+	}
+	return setPhase(db, PhaseSleeping)
+}
+
 func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
-	rows, err := db.Query(
-		`SELECT id, woke_at, slept_at FROM sessions WHERE date = ? ORDER BY id ASC`, date)
+	rows, err := db.Query(`
+		SELECT id, woke_at, slept_at,
+		       COALESCE(comment, ''),
+		       COALESCE(sleep_ease, ''),
+		       COALESCE(overtired, 0)
+		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
 		return nil, err
 	}
@@ -204,9 +265,11 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var s DBSession
 		var wokeAt string
 		var sleptAt sql.NullString
-		if err := rows.Scan(&s.ID, &wokeAt, &sleptAt); err != nil {
+		var overtiredInt int
+		if err := rows.Scan(&s.ID, &wokeAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt); err != nil {
 			return nil, err
 		}
+		s.Overtired = overtiredInt == 1
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}
@@ -218,6 +281,102 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		sessions = append(sessions, s)
 	}
 	return sessions, rows.Err()
+}
+
+func setSleepEase(db *sql.DB, id int, ease string) error {
+	_, err := db.Exec(`UPDATE sessions SET sleep_ease = ? WHERE id = ?`, ease, id)
+	return err
+}
+
+func toggleOvertired(db *sql.DB, id int) error {
+	_, err := db.Exec(
+		`UPDATE sessions SET overtired = CASE WHEN overtired = 1 THEN 0 ELSE 1 END WHERE id = ?`, id,
+	)
+	return err
+}
+
+func setSessionComment(db *sql.DB, id int, comment string) error {
+	_, err := db.Exec(`UPDATE sessions SET comment = ? WHERE id = ?`, comment, id)
+	return err
+}
+
+func getDayStats(db *sql.DB, awakeMins int) ([]DayStat, error) {
+	rows, err := db.Query(`
+		SELECT
+			date,
+			COUNT(*) AS cycles,
+			CAST(AVG(strftime('%s', slept_at) - strftime('%s', woke_at)) AS INTEGER) AS avg_awake_secs,
+			MIN(woke_at) AS first_wake,
+			MAX(slept_at) AS last_sleep,
+			SUM(CASE WHEN sleep_ease = 'easy' THEN 1 ELSE 0 END) AS easy_count,
+			SUM(CASE WHEN sleep_ease = 'ok'   THEN 1 ELSE 0 END) AS ok_count,
+			SUM(CASE WHEN sleep_ease = 'hard' THEN 1 ELSE 0 END) AS hard_count,
+			SUM(CASE WHEN overtired = 1       THEN 1 ELSE 0 END) AS overtired_count
+		FROM sessions
+		WHERE slept_at IS NOT NULL
+		GROUP BY date
+		ORDER BY date DESC
+		LIMIT 30
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	today := time.Now().Format("2006-01-02")
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	target := time.Duration(awakeMins) * time.Minute
+
+	var days []DayStat
+	for rows.Next() {
+		var d DayStat
+		var avgSecs int
+		var firstWake, lastSleep string
+		if err := rows.Scan(&d.Date, &d.Cycles, &avgSecs, &firstWake, &lastSleep,
+			&d.EasyCount, &d.OkCount, &d.HardCount, &d.OvertiredCount); err != nil {
+			return nil, err
+		}
+
+		d.AvgAwakeMins = avgSecs / 60
+
+		switch d.Date {
+		case today:
+			d.DateLabel = "Today"
+		case yesterday:
+			d.DateLabel = "Yesterday"
+		default:
+			if t, err := time.Parse("2006-01-02", d.Date); err == nil {
+				d.DateLabel = t.Format("Mon Jan 2")
+			} else {
+				d.DateLabel = d.Date
+			}
+		}
+
+		diff := time.Duration(avgSecs)*time.Second - target
+		if diff < 0 {
+			diff = -diff
+		}
+		switch {
+		case diff < 10*time.Minute:
+			d.AvgClass = "text-emerald-600"
+		case diff < 20*time.Minute:
+			d.AvgClass = "text-amber-500"
+		default:
+			d.AvgClass = "text-rose-500"
+		}
+
+		if t, err := parseTimestamp(firstWake); err == nil {
+			tl := t.Local()
+			d.FirstWake = &tl
+		}
+		if t, err := parseTimestamp(lastSleep); err == nil {
+			tl := t.Local()
+			d.LastSleep = &tl
+		}
+
+		days = append(days, d)
+	}
+	return days, rows.Err()
 }
 
 // ── routine_sessions ──────────────────────────────────────────────────────────
