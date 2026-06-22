@@ -28,7 +28,7 @@
 
         <div id="state-container"
              hx-get="/api/state"
-             hx-trigger="every 2s [!document.querySelector('#state-container input:focus, #state-container textarea:focus')]"
+             hx-trigger="every 10s [document.visibilityState !== 'hidden' && !document.querySelector('#state-container input:focus, #state-container textarea:focus')]"
              hx-swap="innerHTML">
             {{template "state" .}}
         </div>
