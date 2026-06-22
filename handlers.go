@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"database/sql"
+	"embed"
 	"fmt"
 	"html/template"
 	"log"
@@ -11,6 +12,9 @@ import (
 	"strings"
 	"time"
 )
+
+//go:embed templates
+var templateFS embed.FS
 
 type App struct {
 	db   *sql.DB
@@ -96,7 +100,7 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 
 	return &PageData{
 		Phase:          state.Phase,
-		Elapsed:        formatElapsed(elapsed),
+		Elapsed:        formatDuration(elapsed),
 		StartedAt:      state.PhaseStartedAt.Local().Format("15:04"),
 		Sessions:       buildSchedule(today, dbSessions, routineSessions, cfg.AwakeMinutes, cfg.NapMinutes),
 		Meals:          meals,
@@ -106,18 +110,6 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 		LastSleptAt:    lastSleptAt,
 		ShouldWindDown: shouldWindDown,
 	}, nil
-}
-
-func formatElapsed(d time.Duration) string {
-	if d < 0 {
-		d = 0
-	}
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
 }
 
 func parseTemplates() (*template.Template, error) {
@@ -164,7 +156,7 @@ func parseTemplates() (*template.Template, error) {
 		},
 		"joinActivities": joinActivities,
 	}
-	return template.New("").Funcs(funcs).ParseGlob("templates/*.html")
+	return template.New("").Funcs(funcs).ParseFS(templateFS, "templates/*.html")
 }
 
 // ── page handlers ─────────────────────────────────────────────────────────────
@@ -478,8 +470,14 @@ func (a *App) handleMoveRoutineSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := 1
-	if r.PathValue("dir") == "up" {
+	switch r.PathValue("dir") {
+	case "up":
 		dir = -1
+	case "down":
+		// dir = 1, already set
+	default:
+		http.Error(w, "invalid dir", http.StatusBadRequest)
+		return
 	}
 	if err := moveRoutineSession(a.db, id, dir); err != nil {
 		log.Printf("moveRoutineSession: %v", err)

@@ -129,13 +129,6 @@ func runMigration(db *sql.DB, sql string) error {
 	return nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // ── puppy_state ───────────────────────────────────────────────────────────────
 
 func getState(db *sql.DB) (*PuppyState, error) {

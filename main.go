@@ -4,12 +4,17 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
 
 	_ "modernc.org/sqlite"
 )
 
 func main() {
-	db, err := sql.Open("sqlite", "./puppy.db")
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "./puppy.db"
+	}
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}
