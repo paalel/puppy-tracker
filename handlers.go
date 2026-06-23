@@ -314,11 +314,6 @@ func (a *App) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := setPhase(a.db, phase); err != nil {
-		log.Printf("setPhase: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	a.renderStateFragment(w)
 }
 
