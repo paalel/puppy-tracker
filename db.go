@@ -33,6 +33,9 @@ var migration007SQL string
 //go:embed migrations/008_routine_session_id.sql
 var migration008SQL string
 
+//go:embed migrations/009_drop_puppy_state.sql
+var migration009SQL string
+
 type Phase string
 
 const (
@@ -120,7 +123,7 @@ var mealCatalog = []struct {
 }
 
 func initDB(db *sql.DB) error {
-	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL, migration008SQL} {
+	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL, migration008SQL, migration009SQL} {
 		if err := runMigration(db, sql); err != nil {
 			return err
 		}
@@ -148,29 +151,31 @@ func runMigration(db *sql.DB, sql string) error {
 	return nil
 }
 
-// ── puppy_state ───────────────────────────────────────────────────────────────
+// ── state (derived from sessions) ─────────────────────────────────────────────
 
 func getState(db *sql.DB) (*PuppyState, error) {
-	var s PuppyState
-	var startedAt string
-	err := db.QueryRow(`SELECT phase, phase_started_at FROM puppy_state WHERE id = 1`).
-		Scan(&s.Phase, &startedAt)
+	var wokeAt, sleptAt sql.NullString
+	err := db.QueryRow(
+		`SELECT woke_at, slept_at FROM sessions ORDER BY date DESC, id DESC LIMIT 1`,
+	).Scan(&wokeAt, &sleptAt)
+	if err == sql.ErrNoRows {
+		return &PuppyState{Phase: PhaseSleeping, PhaseStartedAt: time.Now()}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	s.PhaseStartedAt, err = parseTimestamp(startedAt)
-	if err != nil {
-		return nil, fmt.Errorf("parse phase_started_at %q: %w", startedAt, err)
+	if !sleptAt.Valid {
+		t, err := parseTimestamp(wokeAt.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse woke_at: %w", err)
+		}
+		return &PuppyState{Phase: PhaseActive, PhaseStartedAt: t}, nil
 	}
-	return &s, nil
-}
-
-func setPhase(db *sql.DB, phase Phase) error {
-	_, err := db.Exec(
-		`UPDATE puppy_state SET phase = ?, phase_started_at = ? WHERE id = 1`,
-		phase, nowUTC(),
-	)
-	return err
+	t, err := parseTimestamp(sleptAt.String)
+	if err != nil {
+		return nil, fmt.Errorf("parse slept_at: %w", err)
+	}
+	return &PuppyState{Phase: PhaseSleeping, PhaseStartedAt: t}, nil
 }
 
 // ── sessions ──────────────────────────────────────────────────────────────────
@@ -216,13 +221,10 @@ func adjustWakeTime(db *sql.DB, date string, deltaMinutes int) error {
 	}
 	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
 	ts := adjusted.UTC().Format("2006-01-02 15:04:05")
-	if _, err = db.Exec(`
+	_, err = db.Exec(`
 		UPDATE sessions SET woke_at = ?
 		WHERE id = (SELECT id FROM sessions WHERE date = ? ORDER BY id DESC LIMIT 1)
-	`, ts, date); err != nil {
-		return err
-	}
-	_, err = db.Exec(`UPDATE puppy_state SET phase_started_at = ?`, ts)
+	`, ts, date)
 	return err
 }
 
@@ -243,13 +245,10 @@ func adjustSleepTime(db *sql.DB, deltaMinutes int) error {
 	}
 	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
 	ts := adjusted.UTC().Format("2006-01-02 15:04:05")
-	if _, err = db.Exec(`
+	_, err = db.Exec(`
 		UPDATE sessions SET slept_at = ?
 		WHERE id = (SELECT id FROM sessions WHERE slept_at IS NOT NULL ORDER BY id DESC LIMIT 1)
-	`, ts); err != nil {
-		return err
-	}
-	_, err = db.Exec(`UPDATE puppy_state SET phase_started_at = ?`, ts)
+	`, ts)
 	return err
 }
 
@@ -273,10 +272,8 @@ func closeStaleSession(db *sql.DB) error {
 		return nil
 	}
 	closeAt := dateStr + " 23:59:59"
-	if _, err := db.Exec(`UPDATE sessions SET slept_at = ? WHERE id = ?`, closeAt, id); err != nil {
-		return err
-	}
-	return setPhase(db, PhaseSleeping)
+	_, err = db.Exec(`UPDATE sessions SET slept_at = ? WHERE id = ?`, closeAt, id)
+	return err
 }
 
 func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
