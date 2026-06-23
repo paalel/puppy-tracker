@@ -596,6 +596,7 @@ func (a *App) renderFragment(w http.ResponseWriter, name string, data any) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.Write(buf.Bytes())
 }
 
