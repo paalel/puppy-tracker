@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN crate_at DATETIME;
