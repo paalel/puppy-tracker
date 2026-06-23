@@ -36,10 +36,14 @@ var migration008SQL string
 //go:embed migrations/009_drop_puppy_state.sql
 var migration009SQL string
 
+//go:embed migrations/010_crate_at.sql
+var migration010SQL string
+
 type Phase string
 
 const (
 	PhaseActive   Phase = "ACTIVE"
+	PhaseCrating  Phase = "CRATING"
 	PhaseSleeping Phase = "SLEEPING"
 )
 
@@ -76,6 +80,7 @@ type DBSession struct {
 	ID               int
 	RoutineSessionID *int
 	WokeAt           *time.Time
+	CrateAt          *time.Time
 	SleptAt          *time.Time
 	Comment          string
 	SleepEase        string // "", "easy", "ok", "hard"
@@ -123,7 +128,7 @@ var mealCatalog = []struct {
 }
 
 func initDB(db *sql.DB) error {
-	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL, migration008SQL, migration009SQL} {
+	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL, migration008SQL, migration009SQL, migration010SQL} {
 		if err := runMigration(db, sql); err != nil {
 			return err
 		}
@@ -154,28 +159,35 @@ func runMigration(db *sql.DB, sql string) error {
 // ── state (derived from sessions) ─────────────────────────────────────────────
 
 func getState(db *sql.DB) (*PuppyState, error) {
-	var wokeAt, sleptAt sql.NullString
+	var wokeAt, crateAt, sleptAt sql.NullString
 	err := db.QueryRow(
-		`SELECT woke_at, slept_at FROM sessions ORDER BY date DESC, id DESC LIMIT 1`,
-	).Scan(&wokeAt, &sleptAt)
+		`SELECT woke_at, crate_at, slept_at FROM sessions ORDER BY date DESC, id DESC LIMIT 1`,
+	).Scan(&wokeAt, &crateAt, &sleptAt)
 	if err == sql.ErrNoRows {
 		return &PuppyState{Phase: PhaseSleeping, PhaseStartedAt: time.Now()}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if !sleptAt.Valid {
-		t, err := parseTimestamp(wokeAt.String)
+	if sleptAt.Valid {
+		t, err := parseTimestamp(sleptAt.String)
 		if err != nil {
-			return nil, fmt.Errorf("parse woke_at: %w", err)
+			return nil, fmt.Errorf("parse slept_at: %w", err)
 		}
-		return &PuppyState{Phase: PhaseActive, PhaseStartedAt: t}, nil
+		return &PuppyState{Phase: PhaseSleeping, PhaseStartedAt: t}, nil
 	}
-	t, err := parseTimestamp(sleptAt.String)
+	if crateAt.Valid {
+		t, err := parseTimestamp(crateAt.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse crate_at: %w", err)
+		}
+		return &PuppyState{Phase: PhaseCrating, PhaseStartedAt: t}, nil
+	}
+	t, err := parseTimestamp(wokeAt.String)
 	if err != nil {
-		return nil, fmt.Errorf("parse slept_at: %w", err)
+		return nil, fmt.Errorf("parse woke_at: %w", err)
 	}
-	return &PuppyState{Phase: PhaseSleeping, PhaseStartedAt: t}, nil
+	return &PuppyState{Phase: PhaseActive, PhaseStartedAt: t}, nil
 }
 
 // ── sessions ──────────────────────────────────────────────────────────────────
@@ -196,6 +208,14 @@ func logWake(db *sql.DB, date string) error {
 	return err
 }
 
+func logCrate(db *sql.DB) error {
+	_, err := db.Exec(`
+		UPDATE sessions SET crate_at = ?
+		WHERE id = (SELECT id FROM sessions WHERE crate_at IS NULL AND slept_at IS NULL ORDER BY id DESC LIMIT 1)
+	`, nowUTC())
+	return err
+}
+
 func logSleep(db *sql.DB) error {
 	_, err := db.Exec(`
 		UPDATE sessions SET slept_at = ?
@@ -204,57 +224,30 @@ func logSleep(db *sql.DB) error {
 	return err
 }
 
-func adjustWakeTime(db *sql.DB, date string, deltaMinutes int) error {
-	var wokeAtStr string
-	err := db.QueryRow(
-		`SELECT woke_at FROM sessions WHERE date = ? ORDER BY id DESC LIMIT 1`, date,
-	).Scan(&wokeAtStr)
-	if err == sql.ErrNoRows {
+// adjustLatestSessionTime shifts the most recent non-null value of column by
+// deltaMinutes. Safe: column is always a hardcoded internal string, not user input.
+func adjustLatestSessionTime(db *sql.DB, column string, deltaMinutes int) error {
+	var raw sql.NullString
+	q := fmt.Sprintf(`SELECT %s FROM sessions WHERE %s IS NOT NULL ORDER BY id DESC LIMIT 1`, column, column)
+	if err := db.QueryRow(q).Scan(&raw); err == sql.ErrNoRows || !raw.Valid {
 		return nil
+	} else if err != nil {
+		return err
 	}
+	t, err := parseTimestamp(raw.String)
 	if err != nil {
 		return err
 	}
-	t, err := parseTimestamp(wokeAtStr)
-	if err != nil {
-		return err
-	}
-	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
-	ts := adjusted.UTC().Format("2006-01-02 15:04:05")
-	_, err = db.Exec(`
-		UPDATE sessions SET woke_at = ?
-		WHERE id = (SELECT id FROM sessions WHERE date = ? ORDER BY id DESC LIMIT 1)
-	`, ts, date)
+	ts := t.Add(time.Duration(deltaMinutes) * time.Minute).UTC().Format("2006-01-02 15:04:05")
+	u := fmt.Sprintf(`UPDATE sessions SET %s = ? WHERE id = (SELECT id FROM sessions WHERE %s IS NOT NULL ORDER BY id DESC LIMIT 1)`, column, column)
+	_, err = db.Exec(u, ts)
 	return err
 }
 
-func adjustSleepTime(db *sql.DB, deltaMinutes int) error {
-	var sleptAtStr sql.NullString
-	err := db.QueryRow(
-		`SELECT slept_at FROM sessions WHERE slept_at IS NOT NULL ORDER BY id DESC LIMIT 1`,
-	).Scan(&sleptAtStr)
-	if err == sql.ErrNoRows || !sleptAtStr.Valid {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	t, err := parseTimestamp(sleptAtStr.String)
-	if err != nil {
-		return err
-	}
-	adjusted := t.Add(time.Duration(deltaMinutes) * time.Minute)
-	ts := adjusted.UTC().Format("2006-01-02 15:04:05")
-	_, err = db.Exec(`
-		UPDATE sessions SET slept_at = ?
-		WHERE id = (SELECT id FROM sessions WHERE slept_at IS NOT NULL ORDER BY id DESC LIMIT 1)
-	`, ts)
-	return err
-}
 
 // closeStaleSession closes any open session from a previous calendar day by
-// capping slept_at at 23:59:59 of that day, then sets phase to SLEEPING.
-// This handles the case where the user never pressed "Put to Sleep" before midnight.
+// capping crate_at and slept_at at 23:59:59 of that day.
+// This handles the case where the user never pressed "Fell Asleep" before midnight.
 func closeStaleSession(db *sql.DB) error {
 	var id int
 	var dateStr string
@@ -272,13 +265,18 @@ func closeStaleSession(db *sql.DB) error {
 		return nil
 	}
 	closeAt := dateStr + " 23:59:59"
-	_, err = db.Exec(`UPDATE sessions SET slept_at = ? WHERE id = ?`, closeAt, id)
+	_, err = db.Exec(`
+		UPDATE sessions SET
+			crate_at = COALESCE(crate_at, ?),
+			slept_at = ?
+		WHERE id = ?
+	`, closeAt, closeAt, id)
 	return err
 }
 
 func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 	rows, err := db.Query(`
-		SELECT id, routine_session_id, woke_at, slept_at,
+		SELECT id, routine_session_id, woke_at, crate_at, slept_at,
 		       COALESCE(comment, ''),
 		       COALESCE(sleep_ease, ''),
 		       COALESCE(overtired, 0),
@@ -294,10 +292,10 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 	for rows.Next() {
 		var s DBSession
 		var wokeAt string
-		var sleptAt sql.NullString
+		var crateAt, sleptAt sql.NullString
 		var routineSessionID sql.NullInt64
 		var overtiredInt, sleepInterruptedInt int
-		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &s.Toilet); err != nil {
+		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &s.Toilet); err != nil {
 			return nil, err
 		}
 		if routineSessionID.Valid {
@@ -309,6 +307,11 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}
+		if crateAt.Valid {
+			if t, err := parseTimestamp(crateAt.String); err == nil {
+				s.CrateAt = &t
+			}
+		}
 		if sleptAt.Valid {
 			if t, err := parseTimestamp(sleptAt.String); err == nil {
 				s.SleptAt = &t
@@ -319,8 +322,10 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 	return sessions, rows.Err()
 }
 
-func setSleepEase(db *sql.DB, id int, ease string) error {
-	_, err := db.Exec(`UPDATE sessions SET sleep_ease = ? WHERE id = ?`, ease, id)
+// setSessionString sets a text column on a session row.
+// Safe: column is always a hardcoded internal string, not user input.
+func setSessionString(db *sql.DB, id int, column, value string) error {
+	_, err := db.Exec(fmt.Sprintf(`UPDATE sessions SET %s = ? WHERE id = ?`, column), value, id)
 	return err
 }
 
@@ -332,10 +337,6 @@ func toggleSessionBool(db *sql.DB, id int, column string) error {
 	return err
 }
 
-func setSessionComment(db *sql.DB, id int, comment string) error {
-	_, err := db.Exec(`UPDATE sessions SET comment = ? WHERE id = ?`, comment, id)
-	return err
-}
 
 // setSessionTime updates woke_at or slept_at, preserving the existing date and
 // replacing only the hour/minute with newTime (interpreted in local time).
@@ -461,10 +462,6 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	return days, nil
 }
 
-func setSessionToilet(db *sql.DB, id int, value string) error {
-	_, err := db.Exec(`UPDATE sessions SET toilet = ? WHERE id = ?`, value, id)
-	return err
-}
 
 // ── routine_sessions ──────────────────────────────────────────────────────────
 

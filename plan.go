@@ -59,14 +59,16 @@ type SessionView struct {
 	IsPast         bool
 	IsActive       bool
 	IsFuture       bool
-	ActualDuration string
-	DurationClass  string
-	Comment          string
-	SleepEase        string
+	ActualDuration  string
+	DurationClass   string
+	Comment         string
+	SleepEase       string
 	Overtired        bool
 	SleepInterrupted bool
-	Toilet           string
-	SleepDuration    string
+	Toilet          string
+	ActualCrate     *time.Time
+	SleepDuration   string
+	SettleDuration  string
 }
 
 // buildSchedule constructs the day's session list with planned times adjusted
@@ -140,6 +142,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 		var id int
 		var comment, sleepEase, toilet string
 		var overtired, sleepInterrupted bool
+		var ac *time.Time
 		if dbSess != nil {
 			id = dbSess.ID
 			comment = dbSess.Comment
@@ -147,6 +150,14 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			overtired = dbSess.Overtired
 			sleepInterrupted = dbSess.SleepInterrupted
 			toilet = dbSess.Toilet
+			ac = dbSess.CrateAt
+		}
+
+		var settleDuration string
+		if ac != nil && as != nil {
+			if d := as.Sub(*ac); d > 0 {
+				settleDuration = formatDuration(d)
+			}
 		}
 
 		views[i] = SessionView{
@@ -157,6 +168,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			PlannedWake:      plannedWake,
 			PlannedSleep:     plannedWake.Add(awake),
 			ActualWake:       aw,
+			ActualCrate:      ac,
 			ActualSleep:      as,
 			IsPast:           as != nil,
 			IsActive:         aw != nil && as == nil,
@@ -168,6 +180,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			Overtired:        overtired,
 			SleepInterrupted: sleepInterrupted,
 			Toilet:           toilet,
+			SettleDuration:   settleDuration,
 		}
 	}
 
