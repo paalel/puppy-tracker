@@ -59,6 +59,19 @@
 
     </div>
     <script>
+    // Scroll preservation across HTMX swaps.
+    // Capture on hide rather than in htmx:beforeSwap — iOS restores scroll
+    // asynchronously so scrollY may still be 0 when the visibility-triggered
+    // request comes back.
+    var _sy = 0, _fromVis = false;
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') { _sy = window.scrollY; _fromVis = false; }
+        else { _fromVis = true; }
+    });
+    document.addEventListener('htmx:beforeSwap', function() { if (!_fromVis) _sy = window.scrollY; });
+    document.addEventListener('htmx:afterSwap', function() { window.scrollTo(0, _sy); _fromVis = false; });
+
+    // Swipe to navigate days
     var _sx = 0;
     document.addEventListener('touchstart', function(e) { _sx = e.touches[0].clientX; }, {passive: true});
     document.addEventListener('touchend', function(e) {
