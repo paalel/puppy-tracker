@@ -19,6 +19,15 @@
         </button>
     </form>
 
+    {{with currentSession .Sessions}}{{if .ID}}
+    <div class="mt-4 pt-4 border-t border-stone-100">
+        <p class="section-label">Toilet</p>
+        {{template "toilet-buttons" .}}
+        <p class="section-label">Put to sleep</p>
+        {{template "sleep-ease" .}}
+    </div>
+    {{end}}{{end}}
+
     {{template "time-adjust" dict "Endpoint" "/api/crate-adjust" "Label" "In crate at" "Time" .LastCrateAt}}
 </div>
 
@@ -97,6 +106,8 @@
     <div class="mt-4 pt-4 border-t border-stone-100">
         <p class="section-label">Toilet</p>
         {{template "toilet-buttons" .}}
+        <p class="section-label">Put to sleep</p>
+        {{template "sleep-ease" .}}
     </div>
     {{end}}{{end}}
 
@@ -121,7 +132,7 @@
             <div class="flex items-baseline justify-between gap-2">
                 <span class="text-sm font-medium {{if .IsPast}}text-stone-500{{else}}text-stone-700{{end}}">{{.Label}}</span>
                 <span class="text-xs font-mono text-stone-400 flex-shrink-0">
-                    {{if .ActualWake}}{{fmtTime .ActualWake}}{{else}}~{{fmtPlan .PlannedWake}}{{end}}
+                    {{if .ActualWake}}{{fmtTime .ActualWake}}{{else}}~{{fmtPlan .PlannedWake}} – ~{{fmtPlan .PlannedSleep}}{{end}}
                 </span>
             </div>
             {{if .IsPast}}
@@ -162,25 +173,16 @@
             {{end}}
             {{if .ID}}
             <p class="section-label">Put to sleep</p>
-            <div class="flex items-center gap-1">
-                <form class="contents" hx-post="/api/session/{{.ID}}/sleep-ease" hx-target="#state-container" hx-swap="innerHTML">
-                    <button name="value" value="easy" title="Easy to settle"
-                        class="btn-badge {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Easy</button>
-                    <button name="value" value="ok" title="Took some time"
-                        class="btn-badge {{if eq .SleepEase "ok"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">OK</button>
-                    <button name="value" value="hard" title="Struggled to settle"
-                        class="btn-badge {{if eq .SleepEase "hard"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Hard</button>
+            {{template "sleep-ease" .}}
+            <div class="flex items-center gap-1 mt-1">
+                <form hx-post="/api/session/{{.ID}}/sleep-interrupted" hx-target="#state-container" hx-swap="innerHTML">
+                    <button type="submit" title="Toggle sleep interrupted"
+                        class="btn-badge {{if .SleepInterrupted}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Interrupted</button>
                 </form>
-                <div class="ml-auto flex items-center gap-1">
-                    <form hx-post="/api/session/{{.ID}}/sleep-interrupted" hx-target="#state-container" hx-swap="innerHTML">
-                        <button type="submit" title="Toggle sleep interrupted"
-                            class="btn-badge {{if .SleepInterrupted}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Interrupted</button>
-                    </form>
-                    <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML">
-                        <button type="submit" title="Toggle overtired"
-                            class="btn-badge {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
-                    </form>
-                </div>
+                <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML">
+                    <button type="submit" title="Toggle overtired"
+                        class="btn-badge {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
+                </form>
             </div>
             <p class="section-label">Toilet</p>
             {{template "toilet-buttons" .}}
@@ -196,8 +198,6 @@
             {{end}}
             {{else if .IsActive}}
             <p class="text-xs text-emerald-600 mt-0.5">Active now · since {{fmtTime .ActualWake}}</p>
-            {{else}}
-            <p class="text-xs text-stone-400 mt-0.5">{{range .Activities}}{{.}}{{break}}{{end}}</p>
             {{end}}
         </div>
     </div>

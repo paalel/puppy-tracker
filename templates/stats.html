@@ -33,7 +33,7 @@
                 <span class="text-sm font-semibold text-stone-700">{{dayLabel .Date}}</span>
                 <span class="text-xs text-stone-400 font-mono">{{.Date}}</span>
             </div>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-4 gap-2">
                 <div>
                     <p class="text-xs text-stone-400 mb-0.5">Cycles</p>
                     <p class="text-base font-semibold text-stone-700">{{.Cycles}}</p>
@@ -45,6 +45,10 @@
                 <div>
                     <p class="text-xs text-stone-400 mb-0.5">Avg nap</p>
                     <p class="text-base font-semibold text-indigo-500">{{if .AvgNapMins}}{{.AvgNapMins}}m{{else}}–{{end}}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-stone-400 mb-0.5">Avg settle</p>
+                    <p class="text-base font-semibold text-violet-500">{{if .AvgSettleMins}}{{.AvgSettleMins}}m{{else}}–{{end}}</p>
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3 mt-3 pt-2 border-t border-stone-100">

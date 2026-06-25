@@ -94,6 +94,7 @@ type DayStat struct {
 	Cycles           int
 	AvgAwakeMins     int
 	AvgNapMins       int
+	AvgSettleMins    int
 	FirstWake        *time.Time
 	LastSleep        *time.Time
 	EasyCount        int
@@ -443,6 +444,34 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	}
 	for i := range days {
 		days[i].AvgNapMins = napMins[days[i].Date]
+	}
+
+	settleRows, err := db.Query(`
+		SELECT date, CAST(AVG(settle_secs) AS INTEGER) FROM (
+			SELECT date,
+			       CAST(strftime('%s', slept_at) AS INTEGER) - CAST(strftime('%s', crate_at) AS INTEGER) AS settle_secs
+			FROM sessions
+			WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL AND settle_secs > 0
+		) GROUP BY date
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer settleRows.Close()
+	settleMins := make(map[string]int)
+	for settleRows.Next() {
+		var date string
+		var secs int
+		if err := settleRows.Scan(&date, &secs); err != nil {
+			return nil, err
+		}
+		settleMins[date] = secs / 60
+	}
+	if err := settleRows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range days {
+		days[i].AvgSettleMins = settleMins[days[i].Date]
 	}
 
 	// For today, only show LastSleep ("Went to bed") once all routine sessions are
