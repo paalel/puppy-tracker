@@ -66,6 +66,7 @@ func main() {
 	mux.HandleFunc("POST /api/routine/session/{id}/delete", app.handleDeleteRoutineSession)
 	mux.HandleFunc("POST /api/routine/session/{id}/move/{dir}", app.handleMoveRoutineSession)
 	mux.HandleFunc("POST /api/session/{id}/toilet", app.handleSetSessionEnum("toilet", "pee", "poop", "both", "nothing", "accident"))
+	mux.HandleFunc("POST /api/session/{id}/training-quality", app.handleSetSessionEnum("training_quality", "sharp", "ok", "distracted"))
 	mux.HandleFunc("POST /api/night-toilet", app.handleNightToilet)
 
 	log.Println("Puppy Routine Tracker listening on :8080")

@@ -32,6 +32,15 @@
 </form>
 {{end}}
 
+{{define "training-quality"}}
+{{/* expects a SessionView with .ID and .TrainingQuality */}}
+<form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/training-quality" hx-target="#state-container" hx-swap="innerHTML">
+    <button name="value" value="sharp"     type="submit" class="btn-badge {{if eq .TrainingQuality "sharp"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Sharp</button>
+    <button name="value" value="ok"        type="submit" class="btn-badge {{if eq .TrainingQuality "ok"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">OK</button>
+    <button name="value" value="distracted" type="submit" class="btn-badge {{if eq .TrainingQuality "distracted"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Distracted</button>
+</form>
+{{end}}
+
 {{define "sleep-ease"}}
 {{/* expects a SessionView with .ID and .SleepEase */}}
 <form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/sleep-ease" hx-target="#state-container" hx-swap="innerHTML">
