@@ -54,10 +54,6 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 	now := time.Now()
 	today := now.Format("2006-01-02")
 
-	if err := closeStaleSession(db); err != nil {
-		log.Printf("closeStaleSession: %v", err)
-	}
-
 	state, err := getState(db)
 	if err != nil {
 		return nil, fmt.Errorf("get state: %w", err)
@@ -215,6 +211,9 @@ func parseTemplates() (*template.Template, error) {
 // ── page handlers ─────────────────────────────────────────────────────────────
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if err := closeStaleSession(a.db); err != nil {
+		log.Printf("closeStaleSession: %v", err)
+	}
 	data, err := buildPageData(a.db)
 	if err != nil {
 		log.Printf("handleIndex buildPageData: %v", err)
@@ -287,6 +286,9 @@ func (a *App) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 // ── API: state ────────────────────────────────────────────────────────────────
 
 func (a *App) handleGetState(w http.ResponseWriter, r *http.Request) {
+	if err := closeStaleSession(a.db); err != nil {
+		log.Printf("closeStaleSession: %v", err)
+	}
 	a.renderStateFragment(w)
 }
 
