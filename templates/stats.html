@@ -130,10 +130,10 @@
                     <p class="text-sm font-semibold text-stone-700">{{fmtTime .LastSleep}}</p>
                 </div>
                 {{end}}
-                {{if .NightMins}}
+                {{if .TotalSleepMins}}
                 <div>
-                    <p class="text-xs text-stone-400 mb-0.5">Night sleep</p>
-                    <p class="text-sm font-semibold text-indigo-500">{{fmtMins .NightMins}}</p>
+                    <p class="text-xs text-stone-400 mb-0.5">Total sleep</p>
+                    <p class="text-sm font-semibold text-indigo-500">{{fmtMins .TotalSleepMins}}</p>
                 </div>
                 {{end}}
             </div>
