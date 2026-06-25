@@ -56,7 +56,10 @@ type StatsData struct {
 	Tab              string
 	AwakeJSON        template.JS
 	NapJSON          template.JS
-	SettleJSON       template.JS
+	SettleEasyJSON   template.JS
+	SettleOkJSON     template.JS
+	SettleHardJSON   template.JS
+	SettleNoneJSON   template.JS
 	AccidentFreeDays int
 	BucketJSON       template.JS
 	KDEJSON          template.JS
@@ -66,7 +69,6 @@ type StatsData struct {
 	// Sleep tab
 	TotalSleepJSON template.JS
 	NapByTimeJSON  template.JS
-	SettleTrend    string // "improving", "worsening", "stable"
 }
 
 type dailyHours struct {
@@ -74,26 +76,7 @@ type dailyHours struct {
 	Y float64 `json:"y"`
 }
 
-// computeSlope returns the OLS slope in y-units per session (index-based x).
-func computeSlope(points []ChartPoint) float64 {
-	n := float64(len(points))
-	if n < 3 {
-		return 0
-	}
-	var sumX, sumY, sumXY, sumXX float64
-	for i, p := range points {
-		x, y := float64(i), float64(p.Y)
-		sumX += x
-		sumY += y
-		sumXY += x * y
-		sumXX += x * x
-	}
-	denom := n*sumXX - sumX*sumX
-	if denom == 0 {
-		return 0
-	}
-	return (n*sumXY - sumX*sumY) / denom
-}
+
 
 func buildPageData(db *sql.DB, date string) (*PageData, error) {
 	now := time.Now()
@@ -508,7 +491,10 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		sd.SettleJSON = mustJSON(series.Settle)
+		sd.SettleEasyJSON = mustJSON(series.SettleEasy)
+		sd.SettleOkJSON = mustJSON(series.SettleOk)
+		sd.SettleHardJSON = mustJSON(series.SettleHard)
+		sd.SettleNoneJSON = mustJSON(series.SettleNone)
 
 		// Nap duration by time of day: 12 two-hour buckets, avg + count for JS
 		type napBucket struct {
@@ -546,16 +532,8 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		}
 		sd.TotalSleepJSON = mustJSON(totalSleep)
 
-		// Settle trend
-		slope := computeSlope(series.Settle)
-		switch {
-		case slope > 1.0:
-			sd.SettleTrend = "worsening"
-		case slope < -1.0:
-			sd.SettleTrend = "improving"
-		default:
-			sd.SettleTrend = "stable"
-		}
+		// Settle trend — combine all ease groups for slope calculation
+
 	case "toilet":
 		ta, err := getToiletAnalytics(a.db)
 		if err != nil {

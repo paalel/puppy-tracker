@@ -106,10 +106,13 @@ type NumericPoint struct {
 }
 
 type SessionSeries struct {
-	Awake     []ChartPoint
-	Nap       []ChartPoint
-	Settle    []ChartPoint
-	NapByTime []NumericPoint // x = local hour (0–24), y = nap minutes
+	Awake       []ChartPoint
+	Nap         []ChartPoint
+	SettleEasy  []ChartPoint
+	SettleOk    []ChartPoint
+	SettleHard  []ChartPoint
+	SettleNone  []ChartPoint
+	NapByTime   []NumericPoint // x = local hour (0–24), y = nap minutes
 }
 
 var mealCatalog = []struct {
@@ -513,6 +516,7 @@ func getSessionSeries(db *sql.DB) (*SessionSeries, error) {
 			woke_at,
 			crate_at,
 			slept_at,
+			COALESCE(sleep_ease, ''),
 			CAST((strftime('%s', slept_at) - strftime('%s', woke_at)) / 60 AS INTEGER),
 			CASE WHEN crate_at IS NOT NULL
 			     THEN CAST((strftime('%s', slept_at) - strftime('%s', crate_at)) / 60 AS INTEGER)
@@ -531,16 +535,26 @@ func getSessionSeries(db *sql.DB) (*SessionSeries, error) {
 	defer rows.Close()
 	s := &SessionSeries{}
 	for rows.Next() {
-		var wokeAt, sleptAt string
+		var wokeAt, sleptAt, sleepEase string
 		var crateAt sql.NullString
 		var awakeMins int
 		var settleMins, napMins sql.NullInt64
-		if err := rows.Scan(&wokeAt, &crateAt, &sleptAt, &awakeMins, &settleMins, &napMins); err != nil {
+		if err := rows.Scan(&wokeAt, &crateAt, &sleptAt, &sleepEase, &awakeMins, &settleMins, &napMins); err != nil {
 			return nil, err
 		}
 		s.Awake = append(s.Awake, ChartPoint{X: strings.Replace(wokeAt, " ", "T", 1), Y: awakeMins})
 		if settleMins.Valid {
-			s.Settle = append(s.Settle, ChartPoint{X: strings.Replace(crateAt.String, " ", "T", 1), Y: int(settleMins.Int64)})
+			p := ChartPoint{X: strings.Replace(crateAt.String, " ", "T", 1), Y: int(settleMins.Int64)}
+			switch sleepEase {
+			case "easy":
+				s.SettleEasy = append(s.SettleEasy, p)
+			case "ok":
+				s.SettleOk = append(s.SettleOk, p)
+			case "hard":
+				s.SettleHard = append(s.SettleHard, p)
+			default:
+				s.SettleNone = append(s.SettleNone, p)
+			}
 		}
 		if napMins.Valid {
 			s.Nap = append(s.Nap, ChartPoint{X: strings.Replace(sleptAt, " ", "T", 1), Y: int(napMins.Int64)})
