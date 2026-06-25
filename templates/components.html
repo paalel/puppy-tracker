@@ -22,14 +22,25 @@
 {{end}}
 
 {{define "toilet-buttons"}}
-{{/* expects a SessionView with .ID and .Toilet */}}
-<form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
-    <button name="value" value="pee"      type="submit" class="btn-badge {{if eq .Toilet "pee"}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pee</button>
-    <button name="value" value="poop"     type="submit" class="btn-badge {{if eq .Toilet "poop"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Poop</button>
-    <button name="value" value="both"     type="submit" class="btn-badge {{if eq .Toilet "both"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Both</button>
-    <button name="value" value="nothing"  type="submit" class="btn-badge {{if eq .Toilet "nothing"}}bg-stone-300 text-stone-600 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Nope</button>
-    <button name="value" value="accident" type="submit" class="btn-badge {{if eq .Toilet "accident"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
-</form>
+{{/* expects a SessionView with .ID, .ToiletPee, .ToiletPoop, .ToiletAccident */}}
+<div class="flex items-center gap-1">
+    <form hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="pee" type="submit"
+            class="btn-badge {{if .ToiletPee}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pee</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="poop" type="submit"
+            class="btn-badge {{if .ToiletPoop}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Poop</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="accident" type="submit"
+            class="btn-badge {{if .ToiletAccident}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Oops</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/toilet" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="nothing" type="submit"
+            class="btn-badge {{if and (not .ToiletPee) (not .ToiletPoop) (not .ToiletAccident)}}bg-stone-300 text-stone-600 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Nope</button>
+    </form>
+</div>
 {{end}}
 
 {{define "training-quality"}}
