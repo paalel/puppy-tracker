@@ -81,12 +81,17 @@
 
     <div class="mt-4 pt-4 border-t border-stone-100">
         <p class="section-label">Night toilet</p>
-        <form class="flex items-center gap-1" hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
-            <button name="value" value="pee"     type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Pee</button>
-            <button name="value" value="poop"    type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Poop</button>
-            <button name="value" value="both"    type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Both</button>
-            <button name="value" value="nothing" type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Nope</button>
-        </form>
+        <div class="flex items-center gap-1">
+            <form hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
+                <button name="value" value="pee"      type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Pee</button>
+            </form>
+            <form hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
+                <button name="value" value="poop"     type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Poop</button>
+            </form>
+            <form hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
+                <button name="value" value="accident" type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Oops</button>
+            </form>
+        </div>
     </div>
 
     {{template "time-adjust" dict "Endpoint" "/api/sleep-adjust" "Label" "Fell asleep at" "Time" .LastSleptAt}}
@@ -257,13 +262,15 @@
                 rows="1"
                 class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.Comment}}</textarea>
             {{else}}
-            {{if or .SleepEase .SleepInterrupted .Overtired .TrainingQuality .Toilet}}
+            {{if or .SleepEase .SleepInterrupted .Overtired .TrainingQuality .ToiletPee .ToiletPoop .ToiletAccident}}
             <div class="flex items-center gap-1 mt-2 flex-wrap">
                 {{if .TrainingQuality}}<span class="btn-badge {{if eq .TrainingQuality "sharp"}}bg-emerald-100 text-emerald-700{{else if eq .TrainingQuality "ok"}}bg-amber-100 text-amber-700{{else}}bg-rose-100 text-rose-700{{end}} font-medium capitalize">{{.TrainingQuality}}</span>{{end}}
                 {{if .SleepEase}}<span class="btn-badge {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700{{else if eq .SleepEase "ok"}}bg-amber-100 text-amber-700{{else}}bg-rose-100 text-rose-700{{end}} font-medium capitalize">{{.SleepEase}}</span>{{end}}
                 {{if .SleepInterrupted}}<span class="btn-badge bg-amber-100 text-amber-700 font-medium">Interrupted</span>{{end}}
                 {{if .Overtired}}<span class="btn-badge bg-rose-100 text-rose-700 font-medium">Overtired</span>{{end}}
-                {{if .Toilet}}<span class="btn-badge bg-stone-100 text-stone-500 capitalize ml-auto">{{.Toilet}}</span>{{end}}
+                {{if or .ToiletPee .ToiletPoop .ToiletAccident}}
+                <span class="btn-badge bg-stone-100 text-stone-500 ml-auto">{{if .ToiletPee}}Pee{{end}}{{if and .ToiletPee (or .ToiletPoop .ToiletAccident)}} · {{end}}{{if .ToiletPoop}}Poop{{end}}{{if and .ToiletPoop .ToiletAccident}} · {{end}}{{if .ToiletAccident}}Oops{{end}}</span>
+                {{end}}
             </div>
             {{end}}
             {{if .Comment}}<p class="text-xs text-stone-400 mt-1.5 italic">{{.Comment}}</p>{{end}}

@@ -61,7 +61,9 @@ type DBSession struct {
 	SleepEase        string // "", "easy", "ok", "hard"
 	Overtired        bool
 	SleepInterrupted bool
-	Toilet           string // "", "pee", "poop", "both", "nothing", "accident"
+	ToiletPee        bool
+	ToiletPoop       bool
+	ToiletAccident   bool
 	TrainingQuality  string // "", "sharp", "ok", "distracted"
 }
 
@@ -287,7 +289,9 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		       COALESCE(sleep_ease, ''),
 		       COALESCE(overtired, 0),
 		       COALESCE(sleep_interrupted, 0),
-		       COALESCE(toilet, ''),
+		       COALESCE(toilet_pee, 0),
+		       COALESCE(toilet_poop, 0),
+		       COALESCE(toilet_accident, 0),
 		       COALESCE(training_quality, '')
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
@@ -302,7 +306,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var crateAt, sleptAt sql.NullString
 		var routineSessionID sql.NullInt64
 		var overtiredInt, sleepInterruptedInt int
-		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &s.Toilet, &s.TrainingQuality); err != nil {
+		var peeInt, poopInt, accidentInt int
+		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &peeInt, &poopInt, &accidentInt, &s.TrainingQuality); err != nil {
 			return nil, err
 		}
 		if routineSessionID.Valid {
@@ -311,6 +316,9 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		}
 		s.Overtired = overtiredInt == 1
 		s.SleepInterrupted = sleepInterruptedInt == 1
+		s.ToiletPee = peeInt == 1
+		s.ToiletPoop = poopInt == 1
+		s.ToiletAccident = accidentInt == 1
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}
@@ -779,7 +787,7 @@ type PoopStatus struct {
 func getPoopStatus(db *sql.DB) (*PoopStatus, error) {
 	rows, err := db.Query(`
 		SELECT woke_at FROM sessions
-		WHERE toilet IN ('poop','both') AND woke_at IS NOT NULL
+		WHERE toilet_poop = 1 AND woke_at IS NOT NULL
 		ORDER BY woke_at ASC
 	`)
 	if err != nil {
@@ -824,7 +832,7 @@ func getAccidentFreeDays(db *sql.DB) (int, error) {
 	var s string
 	err := db.QueryRow(`
 		SELECT woke_at FROM sessions
-		WHERE toilet = 'accident' AND woke_at IS NOT NULL
+		WHERE toilet_accident = 1 AND woke_at IS NOT NULL
 		ORDER BY woke_at DESC LIMIT 1
 	`).Scan(&s)
 
@@ -860,7 +868,7 @@ type ToiletAnalytics struct {
 func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 	// Sessions: wake windows with toilet data
 	rows, err := db.Query(`
-		SELECT woke_at, toilet FROM sessions WHERE woke_at IS NOT NULL ORDER BY woke_at ASC
+		SELECT woke_at, toilet_poop FROM sessions WHERE woke_at IS NOT NULL ORDER BY woke_at ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -874,8 +882,8 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 
 	for rows.Next() {
 		var s string
-		var toilet sql.NullString
-		if err := rows.Scan(&s, &toilet); err != nil {
+		var poopInt int
+		if err := rows.Scan(&s, &poopInt); err != nil {
 			return nil, err
 		}
 		t, err := parseTimestamp(s)
@@ -885,7 +893,7 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 		lt := t.Local()
 		h := lt.Hour()
 		opportunities[h]++
-		if toilet.String == "poop" || toilet.String == "both" {
+		if poopInt == 1 {
 			buckets[h]++
 			poopCounts[h]++
 			poopTimes = append(poopTimes, float64(lt.Hour())+float64(lt.Minute())/60.0)
@@ -896,14 +904,15 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 	}
 
 	// Night toilet events
-	nrows, err := db.Query(`SELECT occurred_at, toilet FROM night_toilets ORDER BY occurred_at ASC`)
+	nrows, err := db.Query(`SELECT occurred_at, toilet_poop FROM night_toilets ORDER BY occurred_at ASC`)
 	if err != nil {
 		return nil, err
 	}
 	defer nrows.Close()
 	for nrows.Next() {
-		var s, toilet string
-		if err := nrows.Scan(&s, &toilet); err != nil {
+		var s string
+		var poopInt int
+		if err := nrows.Scan(&s, &poopInt); err != nil {
 			return nil, err
 		}
 		t, err := parseTimestamp(s)
@@ -913,7 +922,7 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 		lt := t.Local()
 		h := lt.Hour()
 		opportunities[h]++
-		if toilet == "poop" || toilet == "both" {
+		if poopInt == 1 {
 			buckets[h]++
 			poopCounts[h]++
 			poopTimes = append(poopTimes, float64(lt.Hour())+float64(lt.Minute())/60.0)
@@ -989,9 +998,18 @@ func computeCircularKDE(times []float64) []float64 {
 }
 
 func logNightToilet(db *sql.DB, toilet string) error {
+	pee, poop, accident := 0, 0, 0
+	switch toilet {
+	case "pee":
+		pee = 1
+	case "poop":
+		poop = 1
+	case "accident":
+		accident = 1
+	}
 	_, err := db.Exec(
-		`INSERT INTO night_toilets (occurred_at, toilet) VALUES (?, ?)`,
-		time.Now().UTC().Format("2006-01-02 15:04:05"), toilet,
+		`INSERT INTO night_toilets (occurred_at, toilet, toilet_pee, toilet_poop, toilet_accident) VALUES (?, ?, ?, ?, ?)`,
+		time.Now().UTC().Format("2006-01-02 15:04:05"), toilet, pee, poop, accident,
 	)
 	return err
 }

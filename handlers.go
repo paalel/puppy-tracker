@@ -775,13 +775,45 @@ func (a *App) renderRoutineSessionsFrag(w http.ResponseWriter) {
 	a.renderFragment(w, "routine-sessions", sessions)
 }
 
+func (a *App) handleToggleToilet(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	var query string
+	switch r.FormValue("value") {
+	case "pee":
+		query = `UPDATE sessions SET toilet_pee = 1 - toilet_pee WHERE id = ?`
+	case "poop":
+		query = `UPDATE sessions SET toilet_poop = 1 - toilet_poop WHERE id = ?`
+	case "accident":
+		query = `UPDATE sessions SET toilet_accident = 1 - toilet_accident WHERE id = ?`
+	case "nothing":
+		query = `UPDATE sessions SET toilet_pee = 0, toilet_poop = 0, toilet_accident = 0 WHERE id = ?`
+	default:
+		http.Error(w, "invalid value", http.StatusBadRequest)
+		return
+	}
+	if _, err := a.db.Exec(query, id); err != nil {
+		log.Printf("handleToggleToilet: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
+}
+
 func (a *App) handleNightToilet(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	value := r.FormValue("value")
-	allowed := map[string]bool{"pee": true, "poop": true, "both": true, "nothing": true}
+	allowed := map[string]bool{"pee": true, "poop": true, "accident": true}
 	if !allowed[value] {
 		http.Error(w, "invalid value", http.StatusBadRequest)
 		return
