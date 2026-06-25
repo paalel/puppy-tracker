@@ -42,6 +42,7 @@ type PageData struct {
 	IsToday        bool
 	PrevDate       string
 	NextDate       string
+	PoopStatus     *PoopStatus
 }
 
 type SettingsData struct {
@@ -50,12 +51,14 @@ type SettingsData struct {
 }
 
 type StatsData struct {
-	Days       []DayStat
-	Config     *Config
-	Tab        string
-	AwakeJSON  template.JS
-	NapJSON    template.JS
-	SettleJSON template.JS
+	Days             []DayStat
+	Config           *Config
+	Tab              string
+	AwakeJSON        template.JS
+	NapJSON          template.JS
+	SettleJSON       template.JS
+	AccidentFreeDays int
+	PoopBuckets      []int
 }
 
 func buildPageData(db *sql.DB, date string) (*PageData, error) {
@@ -126,6 +129,11 @@ func buildPageData(db *sql.DB, date string) (*PageData, error) {
 		}
 	}
 
+	ps, err := getPoopStatus(db)
+	if err != nil {
+		return nil, fmt.Errorf("poop status: %w", err)
+	}
+
 	return &PageData{
 		Phase:          phase,
 		Elapsed:        elapsed,
@@ -142,6 +150,7 @@ func buildPageData(db *sql.DB, date string) (*PageData, error) {
 		IsToday:        isToday,
 		PrevDate:       prevDate,
 		NextDate:       nextDate,
+		PoopStatus:     ps,
 	}, nil
 }
 
@@ -167,6 +176,37 @@ func parseTemplates() (*template.Template, error) {
 				return ""
 			}
 			return t.Local().Format("15:04")
+		},
+		"sinceMin": func(t *time.Time) int {
+			if t == nil {
+				return 0
+			}
+			return int(time.Since(*t).Minutes())
+		},
+		"pct": func(count int, buckets []int) int {
+			max := 0
+			for _, v := range buckets {
+				if v > max {
+					max = v
+				}
+			}
+			if max == 0 {
+				return 0
+			}
+			return count * 100 / max
+		},
+		"bucketLabel": func(i int) string {
+			if i%4 == 0 {
+				return fmt.Sprintf("%02d", i)
+			}
+			return ""
+		},
+		"poopSampleSize": func(buckets []int) int {
+			total := 0
+			for _, v := range buckets {
+				total += v
+			}
+			return total
 		},
 		"fmtMins": func(mins int) string {
 			if mins <= 0 {
@@ -437,11 +477,19 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tab := r.URL.Query().Get("tab")
-	if tab != "graph" {
+	if tab != "graph" && tab != "toilet" {
 		tab = "log"
 	}
-	sd := &StatsData{Days: days, Config: cfg, Tab: tab}
-	if tab == "graph" {
+
+	accidentDays, err := getAccidentFreeDays(a.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sd := &StatsData{Days: days, Config: cfg, Tab: tab, AccidentFreeDays: accidentDays}
+	switch tab {
+	case "graph":
 		series, err := getSessionSeries(a.db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -454,6 +502,13 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		sd.AwakeJSON = mustJSON(series.Awake)
 		sd.NapJSON = mustJSON(series.Nap)
 		sd.SettleJSON = mustJSON(series.Settle)
+	case "toilet":
+		buckets, err := getPoopBuckets(a.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.PoopBuckets = buckets
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.tmpl.ExecuteTemplate(w, "stats-page", sd); err != nil {
