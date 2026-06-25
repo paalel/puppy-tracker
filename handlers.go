@@ -63,6 +63,36 @@ type StatsData struct {
 	BetaJSON         template.JS
 	TotalPoops       int
 	TotalWakes       int
+	// Sleep tab
+	TotalSleepJSON template.JS
+	NapByTimeJSON  template.JS
+	SettleTrend    string // "improving", "worsening", "stable"
+}
+
+type dailyHours struct {
+	X string  `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// computeSlope returns the OLS slope in y-units per session (index-based x).
+func computeSlope(points []ChartPoint) float64 {
+	n := float64(len(points))
+	if n < 3 {
+		return 0
+	}
+	var sumX, sumY, sumXY, sumXX float64
+	for i, p := range points {
+		x, y := float64(i), float64(p.Y)
+		sumX += x
+		sumY += y
+		sumXY += x * y
+		sumXX += x * x
+	}
+	denom := n*sumXX - sumX*sumX
+	if denom == 0 {
+		return 0
+	}
+	return (n*sumXY - sumX*sumY) / denom
 }
 
 func buildPageData(db *sql.DB, date string) (*PageData, error) {
@@ -456,7 +486,7 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tab := r.URL.Query().Get("tab")
-	if tab != "graph" && tab != "toilet" {
+	if tab != "sleep" && tab != "toilet" {
 		tab = "log"
 	}
 
@@ -472,15 +502,60 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	}
 	sd := &StatsData{Days: days, Config: cfg, Tab: tab, AccidentFreeDays: accidentDays}
 	switch tab {
-	case "graph":
+	case "sleep":
 		series, err := getSessionSeries(a.db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		sd.AwakeJSON = mustJSON(series.Awake)
-		sd.NapJSON = mustJSON(series.Nap)
 		sd.SettleJSON = mustJSON(series.Settle)
+
+		// Nap duration by time of day: 12 two-hour buckets, avg + count for JS
+		type napBucket struct {
+			Avg   float64 `json:"avg"`
+			Count int     `json:"count"`
+		}
+		bucketSum := make([]int, 12)
+		bucketCount := make([]int, 12)
+		for _, p := range series.NapByTime {
+			b := int(p.X / 2)
+			if b > 11 {
+				b = 11
+			}
+			bucketSum[b] += p.Y
+			bucketCount[b]++
+		}
+		napBuckets := make([]napBucket, 12)
+		for i := range napBuckets {
+			napBuckets[i].Count = bucketCount[i]
+			if bucketCount[i] > 0 {
+				napBuckets[i].Avg = float64(bucketSum[i]) / float64(bucketCount[i])
+			}
+		}
+		sd.NapByTimeJSON = mustJSON(napBuckets)
+
+		// Total sleep per day (ascending order for chart)
+		var totalSleep []dailyHours
+		for i := len(days) - 1; i >= 0; i-- {
+			if days[i].TotalSleepMins > 0 {
+				totalSleep = append(totalSleep, dailyHours{
+					X: days[i].Date,
+					Y: float64(days[i].TotalSleepMins) / 60.0,
+				})
+			}
+		}
+		sd.TotalSleepJSON = mustJSON(totalSleep)
+
+		// Settle trend
+		slope := computeSlope(series.Settle)
+		switch {
+		case slope > 1.0:
+			sd.SettleTrend = "worsening"
+		case slope < -1.0:
+			sd.SettleTrend = "improving"
+		default:
+			sd.SettleTrend = "stable"
+		}
 	case "toilet":
 		ta, err := getToiletAnalytics(a.db)
 		if err != nil {
