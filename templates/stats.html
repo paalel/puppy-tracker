@@ -59,13 +59,7 @@
 
         {{/* ── Settle time trend ───────────────────────────────────────────────── */}}
         <div class="card p-4 mb-3">
-            <div class="flex items-center justify-between mb-0.5">
-                <p class="text-xs font-semibold uppercase tracking-widest text-stone-400">Settle time</p>
-                <span class="text-xs font-medium px-2 py-0.5 rounded-full
-                    {{if eq .SettleTrend "improving"}}bg-emerald-100 text-emerald-700{{else if eq .SettleTrend "worsening"}}bg-rose-100 text-rose-700{{else}}bg-stone-100 text-stone-500{{end}}">
-                    {{if eq .SettleTrend "improving"}}↓ improving{{else if eq .SettleTrend "worsening"}}↑ getting harder{{else}}→ stable{{end}}
-                </span>
-            </div>
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Settle time</p>
             <p class="text-xs text-stone-300 mb-3">Minutes from crate to sleep, per session</p>
             <div style="position:relative;height:160px">
                 <canvas id="settleChart"></canvas>
@@ -115,16 +109,21 @@
                 options: Object.assign({}, OPTS, { scales: { x: timeX, y: minY('h') } }),
             });
 
-            // 2. Settle time over time
+            // 2. Settle time over time — colored by sleep ease
             new Chart(document.getElementById('settleChart'), {
                 type: 'scatter',
-                data: { datasets: [{
-                    data: {{.SettleJSON}},
-                    showLine: true, cubicInterpolationMode: 'monotone',
-                    borderColor: 'rgb(139,92,246)', backgroundColor: 'rgba(139,92,246,0.6)',
-                    pointRadius: 3, borderWidth: 2,
-                }]},
-                options: Object.assign({}, OPTS, { scales: { x: timeX, y: minY('m') } }),
+                data: { datasets: [
+                    { label: 'Easy',      data: {{.SettleEasyJSON}}, backgroundColor: 'rgba(16,185,129,0.8)',  borderColor: 'rgb(16,185,129)',  pointRadius: 5 },
+                    { label: 'OK',        data: {{.SettleOkJSON}},   backgroundColor: 'rgba(245,158,11,0.8)', borderColor: 'rgb(245,158,11)', pointRadius: 5 },
+                    { label: 'Hard',      data: {{.SettleHardJSON}}, backgroundColor: 'rgba(244,63,94,0.8)',  borderColor: 'rgb(244,63,94)',  pointRadius: 5 },
+                    { label: 'Unlogged', data: {{.SettleNoneJSON}}, backgroundColor: 'rgba(168,162,158,0.5)', borderColor: 'rgb(168,162,158)', pointRadius: 4 },
+                ]},
+                options: Object.assign({}, OPTS, {
+                    plugins: {
+                        legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+                    },
+                    scales: { x: timeX, y: minY('m') },
+                }),
             });
 
             // 3. Nap duration by time of day — expected value + opacity by count
