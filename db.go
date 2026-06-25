@@ -749,6 +749,106 @@ func parseTimestamp(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, s)
 }
 
+// lastAccidentBefore is the hardcoded baseline until a new accident is logged in the DB.
+// Her last accident was 2026-06-20 14:00 CEST = 12:00 UTC.
+var lastAccidentBefore = time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+
+type PoopStatus struct {
+	LastPoop        *time.Time
+	AvgIntervalMins int
+	SampleSize      int
+}
+
+// getPoopStatus returns the last poop time and average inter-poop interval.
+func getPoopStatus(db *sql.DB) (*PoopStatus, error) {
+	rows, err := db.Query(`
+		SELECT woke_at FROM sessions
+		WHERE toilet IN ('poop','both') AND woke_at IS NOT NULL
+		ORDER BY woke_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var times []time.Time
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		if t, err := parseTimestamp(s); err == nil {
+			times = append(times, t)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	ps := &PoopStatus{SampleSize: len(times)}
+	if len(times) == 0 {
+		return ps, nil
+	}
+	last := times[len(times)-1].Local()
+	ps.LastPoop = &last
+
+	if len(times) >= 2 {
+		var totalSecs int64
+		for i := 1; i < len(times); i++ {
+			totalSecs += int64(times[i].Sub(times[i-1]).Seconds())
+		}
+		ps.AvgIntervalMins = int(totalSecs/int64(len(times)-1)) / 60
+	}
+	return ps, nil
+}
+
+// getAccidentFreeDays returns days since the last logged accident, falling back
+// to lastAccidentBefore if no accidents are recorded in the DB.
+func getAccidentFreeDays(db *sql.DB) (int, error) {
+	var s string
+	err := db.QueryRow(`
+		SELECT woke_at FROM sessions
+		WHERE toilet = 'accident' AND woke_at IS NOT NULL
+		ORDER BY woke_at DESC LIMIT 1
+	`).Scan(&s)
+
+	var since time.Time
+	if err == sql.ErrNoRows {
+		since = lastAccidentBefore
+	} else if err != nil {
+		return 0, err
+	} else if t, err := parseTimestamp(s); err == nil {
+		since = t
+	}
+
+	days := int(time.Since(since).Hours() / 24)
+	return days, nil
+}
+
+// getPoopBuckets returns counts of poops by 2-hour window (12 buckets, index 0 = 00:00–02:00 local).
+func getPoopBuckets(db *sql.DB) ([]int, error) {
+	rows, err := db.Query(`
+		SELECT woke_at FROM sessions
+		WHERE toilet IN ('poop','both') AND woke_at IS NOT NULL
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	buckets := make([]int, 24)
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		if t, err := parseTimestamp(s); err == nil {
+			buckets[t.Local().Hour()]++
+		}
+	}
+	return buckets, rows.Err()
+}
+
 func splitActivities(text string) []string {
 	var out []string
 	for _, line := range strings.Split(text, "\n") {

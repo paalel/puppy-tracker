@@ -85,13 +85,7 @@
     {{if .ShouldWindDown}}
     <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4">
         <p class="text-sm font-medium text-amber-800 mb-1.5">Time to wind down</p>
-        <ul class="space-y-1">
-            <li class="text-xs text-amber-700 flex gap-1.5"><span class="text-amber-300">·</span>No eye contact, no talking</li>
-            <li class="text-xs text-amber-700 flex gap-1.5"><span class="text-amber-300">·</span>Protect toes and clothing</li>
-            <li class="text-xs text-amber-700 flex gap-1.5"><span class="text-amber-300">·</span>Ignore demanding behavior</li>
-            <li class="text-xs text-amber-700 flex gap-1.5"><span class="text-amber-300">·</span>Move calmly toward the crate</li>
-        </ul>
-        <p class="text-xs text-stone-400 mt-2">Before closing: remove water bowl · cover crate</p>
+        <p class="text-xs text-stone-400 mt-2">Be calm, and use treats to help {{.Config.PuppyName}} settle down</p>
     </div>
     {{end}}
 
@@ -133,9 +127,13 @@
         <div class="min-w-0 flex-1">
             <div class="flex items-baseline justify-between gap-2">
                 <span class="text-sm font-medium {{if .IsPast}}text-stone-500{{else}}text-stone-700{{end}}">{{.Label}}</span>
-                <span class="text-xs font-mono text-stone-400 flex-shrink-0">
-                    {{if .ActualWake}}{{fmtTime .ActualWake}}{{else}}~{{fmtPlan .PlannedWake}} – ~{{fmtPlan .PlannedSleep}}{{end}}
-                </span>
+                {{if .ActualDuration}}
+                  <span class="ml-auto {{.DurationClass}} text-xs font-medium">{{.ActualDuration}}</span>
+                {{else}}
+                  <span class="text-xs font-mono text-stone-400 flex-shrink-0">
+                      ~{{fmtPlan .PlannedWake}} – ~{{fmtPlan .PlannedSleep}}
+                  </span>
+                {{end}}
             </div>
             {{if .IsPast}}
             <div class="flex items-center gap-2 mt-1">
@@ -194,9 +192,6 @@
                     </label>
                 </form>
                 {{end}}
-                {{end}}
-                {{if .ActualDuration}}
-                <span class="ml-auto {{.DurationClass}} text-xs font-medium">{{.ActualDuration}}</span>
                 {{end}}
             </div>
             {{if .SleepDuration}}
@@ -300,6 +295,24 @@
     {{end}}
     </div>
 </div>
+
+{{if and .IsToday .PoopStatus .PoopStatus.LastPoop}}
+{{$minsAgo := sinceMin .PoopStatus.LastPoop}}
+{{$avg := .PoopStatus.AvgIntervalMins}}
+<div class="card px-5 py-3 mt-4 flex items-center justify-between">
+    <div>
+        <p class="text-xs text-stone-400 mb-0.5">Last poop</p>
+        <p class="text-sm font-semibold text-stone-700">{{fmtTime .PoopStatus.LastPoop}} · {{fmtMins $minsAgo}} ago</p>
+    </div>
+    {{if gt $avg 0}}
+    <div class="text-right">
+        <p class="text-xs text-stone-400 mb-0.5">avg every</p>
+        <p class="text-sm font-semibold
+            {{if gt $minsAgo $avg}}text-amber-500{{else}}text-emerald-500{{end}}">{{fmtMins $avg}}</p>
+    </div>
+    {{end}}
+</div>
+{{end}}
 
 <script>
 document.querySelectorAll('textarea').forEach(function(ta) {

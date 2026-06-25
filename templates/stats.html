@@ -19,12 +19,23 @@
             <a href="/" class="text-sm text-stone-400 hover:text-stone-600 transition-colors">← Back</a>
         </header>
 
+        {{/* ── Accident streak ────────────────────────────────────────────────── */}}
+        <div class="card px-5 py-3 mb-4 flex items-center gap-3">
+            <div class="text-2xl font-bold text-emerald-500">{{.AccidentFreeDays}}</div>
+            <div>
+                <p class="text-sm font-medium text-stone-700">days accident-free</p>
+                <p class="text-xs text-stone-400">keep it up!</p>
+            </div>
+        </div>
+
         {{/* ── Tabs ───────────────────────────────────────────────────────────── */}}
         <div class="flex gap-1 mb-5 bg-stone-100 rounded-xl p-1">
             <a href="/stats" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
                 {{if eq .Tab "log"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Log</a>
             <a href="/stats?tab=graph" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
                 {{if eq .Tab "graph"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Graph</a>
+            <a href="/stats?tab=toilet" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
+                {{if eq .Tab "toilet"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Toilet</a>
         </div>
 
         {{if not .Days}}
@@ -49,25 +60,27 @@
         <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
         <script>
         (function() {
+            var COLOR = {
+                awake:  '16, 185, 129',
+                nap:    '99, 102, 241',
+                settle: '139, 92, 246',
+            };
+            function rgb(c)       { return 'rgb('  + c + ')'; }
+            function rgba(c, a)   { return 'rgba(' + c + ',' + a + ')'; }
+            function dataset(data, c) {
+                return {
+                    data: data,
+                    showLine:true, cubicInterpolationMode:'monotone', pointRadius:3, borderWidth:2,
+                    borderColor: rgb(c), backgroundColor: rgba(c, 0.1)
+                };
+            }
             new Chart(document.getElementById('statsChart'), {
                 type: 'scatter',
                 data: {
                     datasets: [
-                        {
-                            data: {{.AwakeJSON}},
-                            showLine:true, tension:0.2, pointRadius:3, borderWidth:2,
-                            borderColor:'rgb(16,185,129)', backgroundColor:'rgba(16,185,129,0.1)'
-                        },
-                        {
-                            data: {{.NapJSON}},
-                            showLine:true, tension:0.2, pointRadius:3, borderWidth:2,
-                            borderColor:'rgb(99,102,241)', backgroundColor:'rgba(99,102,241,0.1)'
-                        },
-                        {
-                            data: {{.SettleJSON}},
-                            showLine:true, tension:0.2, pointRadius:3, borderWidth:2,
-                            borderColor:'rgb(139,92,246)', backgroundColor:'rgba(139,92,246,0.1)'
-                        }
+                        dataset({{.AwakeJSON}},  COLOR.awake),
+                        dataset({{.NapJSON}},    COLOR.nap),
+                        dataset({{.SettleJSON}}, COLOR.settle),
                     ]
                 },
                 options: {
@@ -90,6 +103,29 @@
             });
         })();
         </script>
+
+        {{else if eq .Tab "toilet"}}
+
+        {{/* ── Toilet distribution ───────────────────────────────────────────── */}}
+        <div class="card p-4">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-4">Poop times · 2h buckets</p>
+            <div class="flex items-end gap-1 h-32">
+            {{range $i, $count := .PoopBuckets}}
+                <div class="flex-1 h-full flex flex-col justify-end">
+                    <div class="w-full rounded-t"
+                         style="height:{{if $count}}{{pct $count $.PoopBuckets}}%{{else}}2px{{end}};
+                                background:{{if $count}}rgb(99,102,241){{else}}rgb(231,229,228){{end}}">
+                    </div>
+                </div>
+            {{end}}
+            </div>
+            <div class="flex gap-1 mt-1">
+            {{range $i, $_ := .PoopBuckets}}
+                <div class="flex-1 text-center text-stone-400" style="font-size:9px">{{bucketLabel $i}}</div>
+            {{end}}
+            </div>
+            <p class="text-xs text-stone-300 mt-2 text-center">{{poopSampleSize .PoopBuckets}} data points</p>
+        </div>
 
         {{else}}
 
