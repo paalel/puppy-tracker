@@ -58,7 +58,11 @@ type StatsData struct {
 	NapJSON          template.JS
 	SettleJSON       template.JS
 	AccidentFreeDays int
-	PoopBuckets      []int
+	BucketJSON       template.JS
+	KDEJSON          template.JS
+	BetaJSON         template.JS
+	TotalPoops       int
+	TotalWakes       int
 }
 
 func buildPageData(db *sql.DB, date string) (*PageData, error) {
@@ -182,31 +186,6 @@ func parseTemplates() (*template.Template, error) {
 				return 0
 			}
 			return int(time.Since(*t).Minutes())
-		},
-		"pct": func(count int, buckets []int) int {
-			max := 0
-			for _, v := range buckets {
-				if v > max {
-					max = v
-				}
-			}
-			if max == 0 {
-				return 0
-			}
-			return count * 100 / max
-		},
-		"bucketLabel": func(i int) string {
-			if i%4 == 0 {
-				return fmt.Sprintf("%02d", i)
-			}
-			return ""
-		},
-		"poopSampleSize": func(buckets []int) int {
-			total := 0
-			for _, v := range buckets {
-				total += v
-			}
-			return total
 		},
 		"fmtMins": func(mins int) string {
 			if mins <= 0 {
@@ -487,6 +466,10 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mustJSON := func(v any) template.JS {
+		b, _ := json.Marshal(v)
+		return template.JS(b)
+	}
 	sd := &StatsData{Days: days, Config: cfg, Tab: tab, AccidentFreeDays: accidentDays}
 	switch tab {
 	case "graph":
@@ -495,20 +478,24 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		mustJSON := func(v any) template.JS {
-			b, _ := json.Marshal(v)
-			return template.JS(b)
-		}
 		sd.AwakeJSON = mustJSON(series.Awake)
 		sd.NapJSON = mustJSON(series.Nap)
 		sd.SettleJSON = mustJSON(series.Settle)
 	case "toilet":
-		buckets, err := getPoopBuckets(a.db)
+		ta, err := getToiletAnalytics(a.db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		sd.PoopBuckets = buckets
+		sd.BucketJSON = mustJSON(ta.Buckets)
+		sd.TotalPoops = ta.TotalPoops
+		sd.TotalWakes = ta.TotalWakes
+		if ta.KDE != nil {
+			sd.KDEJSON = mustJSON(ta.KDE)
+		}
+		if ta.BetaMean != nil {
+			sd.BetaJSON = mustJSON(ta.BetaMean)
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.tmpl.ExecuteTemplate(w, "stats-page", sd); err != nil {
@@ -711,4 +698,23 @@ func (a *App) renderRoutineSessionsFrag(w http.ResponseWriter) {
 		return
 	}
 	a.renderFragment(w, "routine-sessions", sessions)
+}
+
+func (a *App) handleNightToilet(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	value := r.FormValue("value")
+	allowed := map[string]bool{"pee": true, "poop": true, "both": true, "nothing": true}
+	if !allowed[value] {
+		http.Error(w, "invalid value", http.StatusBadRequest)
+		return
+	}
+	if err := logNightToilet(a.db, value); err != nil {
+		log.Printf("logNightToilet: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.renderStateFragment(w)
 }
