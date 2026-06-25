@@ -28,7 +28,6 @@ type App struct {
 type PageData struct {
 	Phase          Phase
 	Elapsed        string
-	StartedAt      string
 	Sessions       []SessionView
 	Meals          []MealEntry
 	Config         *Config
@@ -38,6 +37,10 @@ type PageData struct {
 	LastCrateAt    *time.Time
 	IsLocal        bool
 	DBPath         string
+	Date           string
+	IsToday        bool
+	PrevDate       string
+	NextDate       string
 }
 
 type SettingsData struct {
@@ -50,13 +53,18 @@ type StatsData struct {
 	Config *Config
 }
 
-func buildPageData(db *sql.DB) (*PageData, error) {
+func buildPageData(db *sql.DB, date string) (*PageData, error) {
 	now := time.Now()
 	today := now.Format("2006-01-02")
+	isToday := date == today
 
-	state, err := getState(db)
-	if err != nil {
-		return nil, fmt.Errorf("get state: %w", err)
+	d, _ := time.Parse("2006-01-02", date)
+	prevDate := d.AddDate(0, 0, -1).Format("2006-01-02")
+	var nextDate string
+	if !isToday {
+		if next := d.AddDate(0, 0, 1).Format("2006-01-02"); next <= today {
+			nextDate = next
+		}
 	}
 
 	cfg, err := getConfig(db)
@@ -64,7 +72,7 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 		return nil, fmt.Errorf("get config: %w", err)
 	}
 
-	dbSessions, err := getSessionsForDate(db, today)
+	dbSessions, err := getSessionsForDate(db, date)
 	if err != nil {
 		return nil, fmt.Errorf("get sessions: %w", err)
 	}
@@ -74,39 +82,49 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 		return nil, fmt.Errorf("get routine sessions: %w", err)
 	}
 
-	meals, err := getMeals(db, today)
+	meals, err := getMeals(db, date)
 	if err != nil {
 		return nil, fmt.Errorf("get meals: %w", err)
 	}
 
-	elapsed := now.Sub(state.PhaseStartedAt.Local())
-	windDownThreshold := time.Duration(cfg.AwakeMinutes-15) * time.Minute
-	shouldWindDown := state.Phase == PhaseActive && elapsed >= windDownThreshold
-
+	var phase Phase
+	var elapsed string
+	var shouldWindDown bool
 	var lastWokeAt, lastCrateAt, lastSleptAt *time.Time
-	for i := len(dbSessions) - 1; i >= 0; i-- {
-		if lastWokeAt == nil && dbSessions[i].WokeAt != nil {
-			t := dbSessions[i].WokeAt.Local()
-			lastWokeAt = &t
+
+	if isToday {
+		state, err := getState(db)
+		if err != nil {
+			return nil, fmt.Errorf("get state: %w", err)
 		}
-		if lastCrateAt == nil && dbSessions[i].CrateAt != nil {
-			t := dbSessions[i].CrateAt.Local()
-			lastCrateAt = &t
-		}
-		if lastSleptAt == nil && dbSessions[i].SleptAt != nil {
-			t := dbSessions[i].SleptAt.Local()
-			lastSleptAt = &t
-		}
-		if lastWokeAt != nil && lastCrateAt != nil && lastSleptAt != nil {
-			break
+		e := now.Sub(state.PhaseStartedAt.Local())
+		elapsed = formatDuration(e)
+		phase = state.Phase
+		shouldWindDown = phase == PhaseActive && e >= time.Duration(cfg.AwakeMinutes-15)*time.Minute
+
+		for i := len(dbSessions) - 1; i >= 0; i-- {
+			if lastWokeAt == nil && dbSessions[i].WokeAt != nil {
+				t := dbSessions[i].WokeAt.Local()
+				lastWokeAt = &t
+			}
+			if lastCrateAt == nil && dbSessions[i].CrateAt != nil {
+				t := dbSessions[i].CrateAt.Local()
+				lastCrateAt = &t
+			}
+			if lastSleptAt == nil && dbSessions[i].SleptAt != nil {
+				t := dbSessions[i].SleptAt.Local()
+				lastSleptAt = &t
+			}
+			if lastWokeAt != nil && lastCrateAt != nil && lastSleptAt != nil {
+				break
+			}
 		}
 	}
 
 	return &PageData{
-		Phase:          state.Phase,
-		Elapsed:        formatDuration(elapsed),
-		StartedAt:      state.PhaseStartedAt.Local().Format("15:04"),
-		Sessions:       buildSchedule(today, dbSessions, routineSessions, cfg),
+		Phase:          phase,
+		Elapsed:        elapsed,
+		Sessions:       buildSchedule(date, dbSessions, routineSessions, cfg),
 		Meals:          meals,
 		Config:         cfg,
 		LastWokeAt:     lastWokeAt,
@@ -115,6 +133,10 @@ func buildPageData(db *sql.DB) (*PageData, error) {
 		ShouldWindDown: shouldWindDown,
 		IsLocal:        os.Getenv("FLY_APP_NAME") == "",
 		DBPath:         os.Getenv("DATABASE_PATH"),
+		Date:           date,
+		IsToday:        isToday,
+		PrevDate:       prevDate,
+		NextDate:       nextDate,
 	}, nil
 }
 
@@ -214,7 +236,12 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if err := closeStaleSession(a.db); err != nil {
 		log.Printf("closeStaleSession: %v", err)
 	}
-	data, err := buildPageData(a.db)
+	today := time.Now().Format("2006-01-02")
+	date := r.URL.Query().Get("date")
+	if date == "" || date > today {
+		date = today
+	}
+	data, err := buildPageData(a.db, date)
 	if err != nil {
 		log.Printf("handleIndex buildPageData: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -572,7 +599,7 @@ func (a *App) renderFragment(w http.ResponseWriter, name string, data any) {
 }
 
 func (a *App) renderStateFragment(w http.ResponseWriter) {
-	data, err := buildPageData(a.db)
+	data, err := buildPageData(a.db, time.Now().Format("2006-01-02"))
 	if err != nil {
 		log.Printf("buildPageData: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
