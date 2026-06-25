@@ -71,16 +71,7 @@
     document.addEventListener('htmx:beforeSwap', function() { if (!_fromVis) _sy = window.scrollY; });
     document.addEventListener('htmx:afterSwap', function() { window.scrollTo(0, _sy); _fromVis = false; });
 
-    // Swipe to navigate days
-    var _sx = 0;
-    document.addEventListener('touchstart', function(e) { _sx = e.touches[0].clientX; }, {passive: true});
-    document.addEventListener('touchend', function(e) {
-        var dx = e.changedTouches[0].clientX - _sx;
-        if (Math.abs(dx) < 60) return;
-        var dest = dx > 0 ? '{{.PrevDate}}' : '{{.NextDate}}';
-        if (dest) window.location = '/?date=' + dest;
-    });
-    </script>
+</script>
 </body>
 </html>
 {{end}}
