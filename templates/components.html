@@ -53,12 +53,17 @@
 {{end}}
 
 {{define "sleep-ease"}}
-{{/* expects a SessionView with .ID and .SleepEase */}}
-<form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/sleep-ease" hx-target="#state-container" hx-swap="innerHTML">
-    <button name="value" value="easy" type="submit" class="btn-badge {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Easy</button>
-    <button name="value" value="ok"   type="submit" class="btn-badge {{if eq .SleepEase "ok"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">OK</button>
-    <button name="value" value="hard" type="submit" class="btn-badge {{if eq .SleepEase "hard"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Hard</button>
-</form>
+{{/* expects a SessionView with .ID, .SleepEase, .Overtired */}}
+<div class="flex items-center gap-1">
+    <form class="flex items-center gap-1" hx-post="/api/session/{{.ID}}/sleep-ease" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="easy" type="submit" class="btn-badge {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Easy</button>
+        <button name="value" value="ok"   type="submit" class="btn-badge {{if eq .SleepEase "ok"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">OK</button>
+        <button name="value" value="hard" type="submit" class="btn-badge {{if eq .SleepEase "hard"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Hard</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML">
+        <button type="submit" class="btn-badge {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
+    </form>
+</div>
 {{end}}
 
 {{define "time-adjust"}}

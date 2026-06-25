@@ -64,7 +64,6 @@ type SessionView struct {
 	Comment         string
 	SleepEase       string
 	Overtired        bool
-	SleepInterrupted bool
 	ToiletPee       bool
 	ToiletPoop      bool
 	ToiletAccident  bool
@@ -144,14 +143,13 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 
 		var id int
 		var comment, sleepEase, trainingQuality string
-		var overtired, sleepInterrupted, toiletPee, toiletPoop, toiletAccident bool
+		var overtired, toiletPee, toiletPoop, toiletAccident bool
 		var ac *time.Time
 		if dbSess != nil {
 			id = dbSess.ID
 			comment = dbSess.Comment
 			sleepEase = dbSess.SleepEase
 			overtired = dbSess.Overtired
-			sleepInterrupted = dbSess.SleepInterrupted
 			toiletPee = dbSess.ToiletPee
 			toiletPoop = dbSess.ToiletPoop
 			toiletAccident = dbSess.ToiletAccident
@@ -184,7 +182,6 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			Comment:          comment,
 			SleepEase:        sleepEase,
 			Overtired:        overtired,
-			SleepInterrupted: sleepInterrupted,
 			ToiletPee:        toiletPee,
 			ToiletPoop:       toiletPoop,
 			ToiletAccident:   toiletAccident,

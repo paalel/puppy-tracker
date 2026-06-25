@@ -238,16 +238,6 @@
             {{if $.IsToday}}
             <p class="section-label">Put to sleep</p>
             {{template "sleep-ease" .}}
-            <div class="flex items-center gap-1 mt-1">
-                <form hx-post="/api/session/{{.ID}}/sleep-interrupted" hx-target="#state-container" hx-swap="innerHTML">
-                    <button type="submit" title="Toggle sleep interrupted"
-                        class="btn-badge {{if .SleepInterrupted}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Interrupted</button>
-                </form>
-                <form hx-post="/api/session/{{.ID}}/overtired" hx-target="#state-container" hx-swap="innerHTML">
-                    <button type="submit" title="Toggle overtired"
-                        class="btn-badge {{if .Overtired}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Overtired</button>
-                </form>
-            </div>
             <p class="section-label">Training</p>
             {{template "training-quality" .}}
             <p class="section-label">Toilet</p>
@@ -262,11 +252,10 @@
                 rows="1"
                 class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.Comment}}</textarea>
             {{else}}
-            {{if or .SleepEase .SleepInterrupted .Overtired .TrainingQuality .ToiletPee .ToiletPoop .ToiletAccident}}
+            {{if or .SleepEase .Overtired .TrainingQuality .ToiletPee .ToiletPoop .ToiletAccident}}
             <div class="flex items-center gap-1 mt-2 flex-wrap">
                 {{if .TrainingQuality}}<span class="btn-badge {{if eq .TrainingQuality "sharp"}}bg-emerald-100 text-emerald-700{{else if eq .TrainingQuality "ok"}}bg-amber-100 text-amber-700{{else}}bg-rose-100 text-rose-700{{end}} font-medium capitalize">{{.TrainingQuality}}</span>{{end}}
                 {{if .SleepEase}}<span class="btn-badge {{if eq .SleepEase "easy"}}bg-emerald-100 text-emerald-700{{else if eq .SleepEase "ok"}}bg-amber-100 text-amber-700{{else}}bg-rose-100 text-rose-700{{end}} font-medium capitalize">{{.SleepEase}}</span>{{end}}
-                {{if .SleepInterrupted}}<span class="btn-badge bg-amber-100 text-amber-700 font-medium">Interrupted</span>{{end}}
                 {{if .Overtired}}<span class="btn-badge bg-rose-100 text-rose-700 font-medium">Overtired</span>{{end}}
                 {{if or .ToiletPee .ToiletPoop .ToiletAccident}}
                 <span class="btn-badge bg-stone-100 text-stone-500 ml-auto">{{if .ToiletPee}}Pee{{end}}{{if and .ToiletPee (or .ToiletPoop .ToiletAccident)}} · {{end}}{{if .ToiletPoop}}Poop{{end}}{{if and .ToiletPoop .ToiletAccident}} · {{end}}{{if .ToiletAccident}}Oops{{end}}</span>
