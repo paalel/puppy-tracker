@@ -168,6 +168,16 @@ func parseTemplates() (*template.Template, error) {
 			}
 			return t.Local().Format("15:04")
 		},
+		"fmtMins": func(mins int) string {
+			if mins <= 0 {
+				return "–"
+			}
+			h, m := mins/60, mins%60
+			if m == 0 {
+				return fmt.Sprintf("%dh", h)
+			}
+			return fmt.Sprintf("%dh %dm", h, m)
+		},
 		"fmtPlan": func(t time.Time) string {
 			return t.Format("15:04")
 		},

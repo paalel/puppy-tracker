@@ -69,6 +69,7 @@ type DayStat struct {
 	AvgAwakeMins     int
 	AvgNapMins       int
 	AvgSettleMins    int
+	NightMins        int
 	FirstWake        *time.Time
 	LastSleep        *time.Time
 	EasyCount        int
@@ -441,6 +442,22 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	}
 	for i := range days {
 		days[i].AvgSettleMins = settleMins[days[i].Date]
+	}
+
+	nightMins, err := queryDateMins(db, `
+		SELECT s1.date,
+		       CAST(strftime('%s', s2.woke_at) AS INTEGER) - CAST(strftime('%s', s1.slept_at) AS INTEGER)
+		FROM sessions s1
+		JOIN sessions s2 ON s2.date = date(s1.date, '+1 day')
+		WHERE s1.id = (SELECT MAX(id) FROM sessions s3 WHERE s3.date = s1.date AND s3.slept_at IS NOT NULL)
+		  AND s2.id = (SELECT MIN(id) FROM sessions s4 WHERE s4.date = s2.date)
+		  AND s1.slept_at IS NOT NULL AND s2.woke_at IS NOT NULL
+	`)
+	if err != nil {
+		return nil, err
+	}
+	for i := range days {
+		days[i].NightMins = nightMins[days[i].Date]
 	}
 
 	// For today, only show LastSleep ("Went to bed") once all routine sessions are
