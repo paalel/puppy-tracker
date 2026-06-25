@@ -69,7 +69,7 @@ type DayStat struct {
 	AvgAwakeMins     int
 	AvgNapMins       int
 	AvgSettleMins    int
-	NightMins        int
+	TotalSleepMins   int
 	FirstWake        *time.Time
 	LastSleep        *time.Time
 	EasyCount        int
@@ -444,20 +444,35 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 		days[i].AvgSettleMins = settleMins[days[i].Date]
 	}
 
-	nightMins, err := queryDateMins(db, `
-		SELECT s1.date,
-		       CAST(strftime('%s', s2.woke_at) AS INTEGER) - CAST(strftime('%s', s1.slept_at) AS INTEGER)
-		FROM sessions s1
-		JOIN sessions s2 ON s2.date = date(s1.date, '+1 day')
-		WHERE s1.id = (SELECT MAX(id) FROM sessions s3 WHERE s3.date = s1.date AND s3.slept_at IS NOT NULL)
-		  AND s2.id = (SELECT MIN(id) FROM sessions s4 WHERE s4.date = s2.date)
-		  AND s1.slept_at IS NOT NULL AND s2.woke_at IS NOT NULL
+	totalSleepMins, err := queryDateMins(db, `
+		SELECT date, SUM(sleep_secs) FROM (
+			-- daytime naps: slept_at of session N to woke_at of session N+1 (same day)
+			SELECT s1.date,
+			       CAST(strftime('%s', s2.woke_at) AS INTEGER) - CAST(strftime('%s', s1.slept_at) AS INTEGER) AS sleep_secs
+			FROM sessions s1
+			INNER JOIN sessions s2
+			       ON  s2.date = s1.date
+			       AND s2.id   = (SELECT MIN(id) FROM sessions WHERE date = s1.date AND id > s1.id AND woke_at IS NOT NULL)
+			WHERE s1.slept_at IS NOT NULL
+
+			UNION ALL
+
+			-- overnight sleep: last slept_at of day D to first woke_at of day D+1
+			SELECT s1.date,
+			       CAST(strftime('%s', s2.woke_at) AS INTEGER) - CAST(strftime('%s', s1.slept_at) AS INTEGER) AS sleep_secs
+			FROM sessions s1
+			JOIN sessions s2 ON s2.date = date(s1.date, '+1 day')
+			WHERE s1.id = (SELECT MAX(id) FROM sessions s3 WHERE s3.date = s1.date AND s3.slept_at IS NOT NULL)
+			  AND s2.id = (SELECT MIN(id) FROM sessions s4 WHERE s4.date = s2.date)
+			  AND s1.slept_at IS NOT NULL AND s2.woke_at IS NOT NULL
+		) WHERE sleep_secs > 0
+		GROUP BY date
 	`)
 	if err != nil {
 		return nil, err
 	}
 	for i := range days {
-		days[i].NightMins = nightMins[days[i].Date]
+		days[i].TotalSleepMins = totalSleepMins[days[i].Date]
 	}
 
 	// For today, only show LastSleep ("Went to bed") once all routine sessions are
