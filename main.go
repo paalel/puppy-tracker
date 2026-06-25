@@ -51,7 +51,6 @@ func main() {
 	mux.HandleFunc("POST /api/session/{id}/comment", app.handleSetSessionComment)
 	mux.HandleFunc("POST /api/session/{id}/sleep-ease", app.handleSetSessionEnum("sleep_ease", "easy", "ok", "hard"))
 	mux.HandleFunc("POST /api/session/{id}/overtired", app.handleToggleSessionBool("overtired"))
-	mux.HandleFunc("POST /api/session/{id}/sleep-interrupted", app.handleToggleSessionBool("sleep_interrupted"))
 	mux.HandleFunc("POST /api/session/{id}/wake-time", app.handleSetSessionTime("woke_at"))
 	mux.HandleFunc("POST /api/session/{id}/crate-time", app.handleSetSessionTime("crate_at"))
 	mux.HandleFunc("POST /api/session/{id}/sleep-time", app.handleSetSessionTime("slept_at"))

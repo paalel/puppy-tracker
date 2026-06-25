@@ -60,7 +60,6 @@ type DBSession struct {
 	Comment          string
 	SleepEase        string // "", "easy", "ok", "hard"
 	Overtired        bool
-	SleepInterrupted bool
 	ToiletPee        bool
 	ToiletPoop       bool
 	ToiletAccident   bool
@@ -80,7 +79,6 @@ type DayStat struct {
 	OkCount          int
 	HardCount        int
 	OvertiredCount   int
-	InterruptedCount int
 	AccidentCount    int
 }
 
@@ -288,7 +286,6 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		       COALESCE(comment, ''),
 		       COALESCE(sleep_ease, ''),
 		       COALESCE(overtired, 0),
-		       COALESCE(sleep_interrupted, 0),
 		       COALESCE(toilet_pee, 0),
 		       COALESCE(toilet_poop, 0),
 		       COALESCE(toilet_accident, 0),
@@ -305,9 +302,9 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var wokeAt string
 		var crateAt, sleptAt sql.NullString
 		var routineSessionID sql.NullInt64
-		var overtiredInt, sleepInterruptedInt int
+		var overtiredInt int
 		var peeInt, poopInt, accidentInt int
-		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &peeInt, &poopInt, &accidentInt, &s.TrainingQuality); err != nil {
+		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &peeInt, &poopInt, &accidentInt, &s.TrainingQuality); err != nil {
 			return nil, err
 		}
 		if routineSessionID.Valid {
@@ -315,7 +312,6 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 			s.RoutineSessionID = &id
 		}
 		s.Overtired = overtiredInt == 1
-		s.SleepInterrupted = sleepInterruptedInt == 1
 		s.ToiletPee = peeInt == 1
 		s.ToiletPoop = poopInt == 1
 		s.ToiletAccident = accidentInt == 1
@@ -388,8 +384,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			SUM(CASE WHEN sleep_ease = 'ok'      THEN 1 ELSE 0 END) AS ok_count,
 			SUM(CASE WHEN sleep_ease = 'hard'    THEN 1 ELSE 0 END) AS hard_count,
 			SUM(CASE WHEN overtired = 1          THEN 1 ELSE 0 END) AS overtired_count,
-			SUM(CASE WHEN sleep_interrupted = 1  THEN 1 ELSE 0 END) AS interrupted_count,
-			SUM(CASE WHEN toilet = 'accident'    THEN 1 ELSE 0 END) AS accident_count
+			SUM(CASE WHEN toilet_accident = 1    THEN 1 ELSE 0 END) AS accident_count
 		FROM sessions
 		WHERE slept_at IS NOT NULL
 		GROUP BY date
@@ -410,7 +405,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 		var firstWake, lastSleep string
 		if err := rows.Scan(&d.Date, &d.Cycles, &avgSecs, &firstWake, &lastSleep,
 			&d.EasyCount, &d.OkCount, &d.HardCount, &d.OvertiredCount,
-			&d.InterruptedCount, &d.AccidentCount); err != nil {
+			&d.AccidentCount); err != nil {
 			return nil, err
 		}
 		d.AvgAwakeMins = avgSecs / 60

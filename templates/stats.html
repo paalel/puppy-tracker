@@ -300,12 +300,11 @@
                 </div>
                 {{end}}
             </div>
-            {{if or .EasyCount .OkCount .HardCount .OvertiredCount .InterruptedCount .AccidentCount}}
+            {{if or .EasyCount .OkCount .HardCount .OvertiredCount .AccidentCount}}
             <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mt-2 pt-2 border-t border-stone-100">
                 {{if .EasyCount}}<span class="text-xs text-emerald-600">{{.EasyCount}}× easy</span>{{end}}
                 {{if .OkCount}}<span class="text-xs text-amber-600">{{.OkCount}}× ok</span>{{end}}
                 {{if .HardCount}}<span class="text-xs text-rose-600">{{.HardCount}}× hard</span>{{end}}
-                {{if .InterruptedCount}}<span class="text-xs text-amber-600">{{.InterruptedCount}}× interrupted</span>{{end}}
                 {{if .OvertiredCount}}<span class="text-xs text-rose-600">{{.OvertiredCount}}× overtired</span>{{end}}
                 {{if .AccidentCount}}<span class="text-xs text-rose-700 font-medium ml-auto">{{.AccidentCount}}× accident</span>{{end}}
             </div>
