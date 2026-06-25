@@ -1,43 +1,17 @@
 package main
 
 import (
-	_ "embed"
 	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"strconv"
 	"strings"
 	"time"
 )
 
-//go:embed migrations/001_initial.sql
-var migration001SQL string
-
-//go:embed migrations/002_session_comments.sql
-var migration002SQL string
-
-//go:embed migrations/003_session_sleep_metrics.sql
-var migration003SQL string
-
-//go:embed migrations/004_outdoor_log.sql
-var migration004SQL string
-
-//go:embed migrations/005_outdoor_log_session_id.sql
-var migration005SQL string
-
-//go:embed migrations/006_session_toilet.sql
-var migration006SQL string
-
-//go:embed migrations/007_sleep_interrupted.sql
-var migration007SQL string
-
-//go:embed migrations/008_routine_session_id.sql
-var migration008SQL string
-
-//go:embed migrations/009_drop_puppy_state.sql
-var migration009SQL string
-
-//go:embed migrations/010_crate_at.sql
-var migration010SQL string
+//go:embed migrations
+var migrationsFS embed.FS
 
 type Phase string
 
@@ -129,8 +103,19 @@ var mealCatalog = []struct {
 }
 
 func initDB(db *sql.DB) error {
-	for _, sql := range []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL, migration008SQL, migration009SQL, migration010SQL} {
-		if err := runMigration(db, sql); err != nil {
+	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
+			continue
+		}
+		sql, err := fs.ReadFile(migrationsFS, "migrations/"+e.Name())
+		if err != nil {
+			return err
+		}
+		if err := runMigration(db, string(sql)); err != nil {
 			return err
 		}
 	}
@@ -414,8 +399,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 		return nil, err
 	}
 
-	// Compute avg nap duration (gap between consecutive sessions on the same day).
-	napRows, err := db.Query(`
+	napMins, err := queryDateMins(db, `
 		SELECT date, CAST(AVG(nap_secs) AS INTEGER) FROM (
 			SELECT s1.date,
 			       CAST(strftime('%s', s2.woke_at) AS INTEGER) - CAST(strftime('%s', s1.slept_at) AS INTEGER) AS nap_secs
@@ -429,24 +413,11 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer napRows.Close()
-	napMins := make(map[string]int)
-	for napRows.Next() {
-		var date string
-		var secs int
-		if err := napRows.Scan(&date, &secs); err != nil {
-			return nil, err
-		}
-		napMins[date] = secs / 60
-	}
-	if err := napRows.Err(); err != nil {
-		return nil, err
-	}
 	for i := range days {
 		days[i].AvgNapMins = napMins[days[i].Date]
 	}
 
-	settleRows, err := db.Query(`
+	settleMins, err := queryDateMins(db, `
 		SELECT date, CAST(AVG(settle_secs) AS INTEGER) FROM (
 			SELECT date,
 			       CAST(strftime('%s', slept_at) AS INTEGER) - CAST(strftime('%s', crate_at) AS INTEGER) AS settle_secs
@@ -455,19 +426,6 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 		) GROUP BY date
 	`)
 	if err != nil {
-		return nil, err
-	}
-	defer settleRows.Close()
-	settleMins := make(map[string]int)
-	for settleRows.Next() {
-		var date string
-		var secs int
-		if err := settleRows.Scan(&date, &secs); err != nil {
-			return nil, err
-		}
-		settleMins[date] = secs / 60
-	}
-	if err := settleRows.Err(); err != nil {
 		return nil, err
 	}
 	for i := range days {
@@ -671,6 +629,26 @@ func setMeal(db *sql.DB, date string, mealType MealType, amount MealAmount) erro
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+// queryDateMins runs a query that returns (date, seconds) rows and converts
+// the result into a map of date → minutes.
+func queryDateMins(db *sql.DB, query string) (map[string]int, error) {
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]int)
+	for rows.Next() {
+		var date string
+		var secs int
+		if err := rows.Scan(&date, &secs); err != nil {
+			return nil, err
+		}
+		m[date] = secs / 60
+	}
+	return m, rows.Err()
+}
 
 func nowUTC() string {
 	return time.Now().UTC().Format("2006-01-02 15:04:05")
