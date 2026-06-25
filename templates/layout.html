@@ -34,14 +34,40 @@
         </div>
         {{end}}
 
+        <div class="flex items-center justify-between mb-4">
+            <a href="/?date={{.PrevDate}}" class="w-9 h-9 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors select-none text-base">←</a>
+            <span class="text-sm font-medium text-stone-600">{{dayLabel .Date}}</span>
+            {{if .NextDate}}
+            <a href="/?date={{.NextDate}}" class="w-9 h-9 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors select-none text-base">→</a>
+            {{else}}
+            <div class="w-9"></div>
+            {{end}}
+        </div>
+
+        {{if .IsToday}}
         <div id="state-container"
              hx-get="/api/state"
              hx-trigger="every 10s [document.visibilityState !== 'hidden' && !document.querySelector('#state-container input:focus, #state-container textarea:focus')], visibilitychange[document.visibilityState === 'visible'] from:document"
              hx-swap="innerHTML">
             {{template "state" .}}
         </div>
+        {{else}}
+        <div id="state-container">
+            {{template "state" .}}
+        </div>
+        {{end}}
 
     </div>
+    <script>
+    var _sx = 0;
+    document.addEventListener('touchstart', function(e) { _sx = e.touches[0].clientX; }, {passive: true});
+    document.addEventListener('touchend', function(e) {
+        var dx = e.changedTouches[0].clientX - _sx;
+        if (Math.abs(dx) < 60) return;
+        var dest = dx > 0 ? '{{.PrevDate}}' : '{{.NextDate}}';
+        if (dest) window.location = '/?date=' + dest;
+    });
+    </script>
 </body>
 </html>
 {{end}}
