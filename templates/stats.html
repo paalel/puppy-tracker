@@ -119,7 +119,7 @@
                     <p class="text-base font-semibold text-violet-500">{{if .AvgSettleMins}}{{.AvgSettleMins}}m{{else}}–{{end}}</p>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-3 mt-3 pt-2 border-t border-stone-100">
+            <div class="grid grid-cols-3 gap-3 mt-3 pt-2 border-t border-stone-100">
                 <div>
                     <p class="text-xs text-stone-400 mb-0.5">First wake</p>
                     <p class="text-sm font-semibold text-stone-700">{{fmtTime .FirstWake}}</p>
@@ -128,6 +128,12 @@
                 <div>
                     <p class="text-xs text-stone-400 mb-0.5">Went to bed</p>
                     <p class="text-sm font-semibold text-stone-700">{{fmtTime .LastSleep}}</p>
+                </div>
+                {{end}}
+                {{if .NightMins}}
+                <div>
+                    <p class="text-xs text-stone-400 mb-0.5">Night sleep</p>
+                    <p class="text-sm font-semibold text-indigo-500">{{fmtMins .NightMins}}</p>
                 </div>
                 {{end}}
             </div>
