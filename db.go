@@ -62,6 +62,7 @@ type DBSession struct {
 	Overtired        bool
 	SleepInterrupted bool
 	Toilet           string // "", "pee", "poop", "both", "nothing", "accident"
+	TrainingQuality  string // "", "sharp", "ok", "distracted"
 }
 
 type DayStat struct {
@@ -286,7 +287,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		       COALESCE(sleep_ease, ''),
 		       COALESCE(overtired, 0),
 		       COALESCE(sleep_interrupted, 0),
-		       COALESCE(toilet, '')
+		       COALESCE(toilet, ''),
+		       COALESCE(training_quality, '')
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
 		return nil, err
@@ -300,7 +302,7 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var crateAt, sleptAt sql.NullString
 		var routineSessionID sql.NullInt64
 		var overtiredInt, sleepInterruptedInt int
-		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &s.Toilet); err != nil {
+		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &sleepInterruptedInt, &s.Toilet, &s.TrainingQuality); err != nil {
 			return nil, err
 		}
 		if routineSessionID.Valid {
