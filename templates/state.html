@@ -1,5 +1,23 @@
 {{define "state"}}
 
+{{if and .IsToday .PoopStatus .PoopStatus.LastPoop}}
+{{$minsAgo := sinceMin .PoopStatus.LastPoop}}
+{{$avg := .PoopStatus.AvgIntervalMins}}
+<div class="card px-5 py-3 mb-4 flex items-center justify-between">
+    <div>
+        <p class="text-xs text-stone-400 mb-0.5">Last poop</p>
+        <p class="text-sm font-semibold text-stone-700">{{fmtTime .PoopStatus.LastPoop}} · {{fmtMins $minsAgo}} ago</p>
+    </div>
+    {{if gt $avg 0}}
+    <div class="text-right">
+        <p class="text-xs text-stone-400 mb-0.5">avg every</p>
+        <p class="text-sm font-semibold
+            {{if gt $minsAgo $avg}}text-amber-500{{else}}text-emerald-500{{end}}">{{fmtMins $avg}}</p>
+    </div>
+    {{end}}
+</div>
+{{end}}
+
 {{/* ── Current Phase Card ─────────────────────────────────────────────────── */}}
 
 {{if .IsToday}}
@@ -60,6 +78,16 @@
             {{.Config.PuppyName}} Woke Up
         </button>
     </form>
+
+    <div class="mt-4 pt-4 border-t border-stone-100">
+        <p class="section-label">Night toilet</p>
+        <form class="flex items-center gap-1" hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
+            <button name="value" value="pee"     type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Pee</button>
+            <button name="value" value="poop"    type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Poop</button>
+            <button name="value" value="both"    type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Both</button>
+            <button name="value" value="nothing" type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Nope</button>
+        </form>
+    </div>
 
     {{template "time-adjust" dict "Endpoint" "/api/sleep-adjust" "Label" "Fell asleep at" "Time" .LastSleptAt}}
 </div>
@@ -295,24 +323,6 @@
     {{end}}
     </div>
 </div>
-
-{{if and .IsToday .PoopStatus .PoopStatus.LastPoop}}
-{{$minsAgo := sinceMin .PoopStatus.LastPoop}}
-{{$avg := .PoopStatus.AvgIntervalMins}}
-<div class="card px-5 py-3 mt-4 flex items-center justify-between">
-    <div>
-        <p class="text-xs text-stone-400 mb-0.5">Last poop</p>
-        <p class="text-sm font-semibold text-stone-700">{{fmtTime .PoopStatus.LastPoop}} · {{fmtMins $minsAgo}} ago</p>
-    </div>
-    {{if gt $avg 0}}
-    <div class="text-right">
-        <p class="text-xs text-stone-400 mb-0.5">avg every</p>
-        <p class="text-sm font-semibold
-            {{if gt $minsAgo $avg}}text-amber-500{{else}}text-emerald-500{{end}}">{{fmtMins $avg}}</p>
-    </div>
-    {{end}}
-</div>
-{{end}}
 
 <script>
 document.querySelectorAll('textarea').forEach(function(ta) {

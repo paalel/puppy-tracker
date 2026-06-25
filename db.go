@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -825,11 +826,26 @@ func getAccidentFreeDays(db *sql.DB) (int, error) {
 	return days, nil
 }
 
-// getPoopBuckets returns counts of poops by 2-hour window (12 buckets, index 0 = 00:00–02:00 local).
-func getPoopBuckets(db *sql.DB) ([]int, error) {
+const (
+	minKDESamples  = 5
+	minBetaSamples = 14 // ~2 weeks of wake windows
+	kdeBandwidth   = 1.5
+)
+
+type ToiletAnalytics struct {
+	Buckets    []int
+	TotalPoops int
+	TotalWakes int
+	// KDE is nil until TotalPoops >= minKDESamples
+	KDE []float64
+	// BetaMean is nil until TotalWakes >= minBetaSamples
+	BetaMean []float64
+}
+
+func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
+	// Sessions: wake windows with toilet data
 	rows, err := db.Query(`
-		SELECT woke_at FROM sessions
-		WHERE toilet IN ('poop','both') AND woke_at IS NOT NULL
+		SELECT woke_at, toilet FROM sessions WHERE woke_at IS NOT NULL ORDER BY woke_at ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -837,16 +853,132 @@ func getPoopBuckets(db *sql.DB) ([]int, error) {
 	defer rows.Close()
 
 	buckets := make([]int, 24)
+	opportunities := make([]int, 24)
+	poopCounts := make([]int, 24)
+	var poopTimes []float64
+
 	for rows.Next() {
 		var s string
-		if err := rows.Scan(&s); err != nil {
+		var toilet sql.NullString
+		if err := rows.Scan(&s, &toilet); err != nil {
 			return nil, err
 		}
-		if t, err := parseTimestamp(s); err == nil {
-			buckets[t.Local().Hour()]++
+		t, err := parseTimestamp(s)
+		if err != nil {
+			continue
+		}
+		lt := t.Local()
+		h := lt.Hour()
+		opportunities[h]++
+		if toilet.String == "poop" || toilet.String == "both" {
+			buckets[h]++
+			poopCounts[h]++
+			poopTimes = append(poopTimes, float64(lt.Hour())+float64(lt.Minute())/60.0)
 		}
 	}
-	return buckets, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Night toilet events
+	nrows, err := db.Query(`SELECT occurred_at, toilet FROM night_toilets ORDER BY occurred_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer nrows.Close()
+	for nrows.Next() {
+		var s, toilet string
+		if err := nrows.Scan(&s, &toilet); err != nil {
+			return nil, err
+		}
+		t, err := parseTimestamp(s)
+		if err != nil {
+			continue
+		}
+		lt := t.Local()
+		h := lt.Hour()
+		opportunities[h]++
+		if toilet == "poop" || toilet == "both" {
+			buckets[h]++
+			poopCounts[h]++
+			poopTimes = append(poopTimes, float64(lt.Hour())+float64(lt.Minute())/60.0)
+		}
+	}
+	if err := nrows.Err(); err != nil {
+		return nil, err
+	}
+
+	totalWakes := 0
+	for _, v := range opportunities {
+		totalWakes += v
+	}
+
+	ta := &ToiletAnalytics{
+		Buckets:    buckets,
+		TotalPoops: len(poopTimes),
+		TotalWakes: totalWakes,
+	}
+
+	if len(poopTimes) >= minKDESamples {
+		ta.KDE = computeCircularKDE(poopTimes)
+		// Normalize KDE to the same scale as the count bars
+		maxBar, maxKDE := 0, 0.0
+		for _, v := range buckets {
+			if v > maxBar {
+				maxBar = v
+			}
+		}
+		for _, v := range ta.KDE {
+			if v > maxKDE {
+				maxKDE = v
+			}
+		}
+		if maxKDE > 0 && maxBar > 0 {
+			scale := float64(maxBar) / maxKDE
+			for i := range ta.KDE {
+				ta.KDE[i] *= scale
+			}
+		}
+	}
+
+	if totalWakes >= minBetaSamples {
+		ta.BetaMean = make([]float64, 24)
+		for h := 0; h < 24; h++ {
+			// Beta(1,1) prior — uniform, updates with each observation
+			alpha := float64(poopCounts[h]) + 1.0
+			beta := float64(opportunities[h]-poopCounts[h]) + 1.0
+			ta.BetaMean[h] = alpha / (alpha + beta)
+		}
+	}
+
+	return ta, nil
+}
+
+// computeCircularKDE evaluates a Gaussian KDE at the midpoint of each hour,
+// wrapping around midnight so 23:30 and 00:30 are treated as close.
+func computeCircularKDE(times []float64) []float64 {
+	result := make([]float64, 24)
+	for h := 0; h < 24; h++ {
+		x := float64(h) + 0.5
+		for _, t := range times {
+			d := x - t
+			if d > 12 {
+				d -= 24
+			} else if d < -12 {
+				d += 24
+			}
+			result[h] += math.Exp(-0.5 * d * d / (kdeBandwidth * kdeBandwidth))
+		}
+	}
+	return result
+}
+
+func logNightToilet(db *sql.DB, toilet string) error {
+	_, err := db.Exec(
+		`INSERT INTO night_toilets (occurred_at, toilet) VALUES (?, ?)`,
+		time.Now().UTC().Format("2006-01-02 15:04:05"), toilet,
+	)
+	return err
 }
 
 func splitActivities(text string) []string {
