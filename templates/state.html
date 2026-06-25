@@ -166,21 +166,33 @@
                 </label>
                 {{end}}
                 {{else}}
-                <span class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
-                    <span class="text-xs text-stone-400">↑</span>
-                    <span class="text-xs font-mono text-stone-600">{{fmtTime .ActualWake}}</span>
-                </span>
+                <form method="post" action="/api/session/{{.ID}}/wake-time">
+                    <label class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
+                        <span class="text-xs text-stone-400">↑</span>
+                        <input type="time" name="time" value="{{fmtTime .ActualWake}}"
+                            onchange="this.form.submit()"
+                            class="text-xs font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none flex-1 min-w-0">
+                    </label>
+                </form>
                 {{if .ActualCrate}}
-                <span class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
-                    <span class="text-xs text-stone-400">🏠</span>
-                    <span class="text-xs font-mono text-stone-600">{{fmtTime .ActualCrate}}</span>
-                </span>
+                <form method="post" action="/api/session/{{.ID}}/crate-time">
+                    <label class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
+                        <span class="text-xs text-stone-400">🏠</span>
+                        <input type="time" name="time" value="{{fmtTime .ActualCrate}}"
+                            onchange="this.form.submit()"
+                            class="text-xs font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none flex-1 min-w-0">
+                    </label>
+                </form>
                 {{end}}
                 {{if .ActualSleep}}
-                <span class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
-                    <span class="text-xs text-stone-400">💤</span>
-                    <span class="text-xs font-mono text-stone-600">{{fmtTime .ActualSleep}}</span>
-                </span>
+                <form method="post" action="/api/session/{{.ID}}/sleep-time">
+                    <label class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
+                        <span class="text-xs text-stone-400">💤</span>
+                        <input type="time" name="time" value="{{fmtTime .ActualSleep}}"
+                            onchange="this.form.submit()"
+                            class="text-xs font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none flex-1 min-w-0">
+                    </label>
+                </form>
                 {{end}}
                 {{end}}
                 {{if .ActualDuration}}

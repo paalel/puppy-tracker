@@ -537,6 +537,12 @@ func (a *App) handleSetSessionTime(column string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		var sessionDate string
+		today := time.Now().Format("2006-01-02")
+		if err := a.db.QueryRow(`SELECT date FROM sessions WHERE id = ?`, id).Scan(&sessionDate); err == nil && sessionDate != today {
+			http.Redirect(w, r, "/?date="+sessionDate, http.StatusSeeOther)
+			return
+		}
 		a.renderStateFragment(w)
 	}
 }
