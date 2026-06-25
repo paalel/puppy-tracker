@@ -92,6 +92,17 @@ type RoutineSession struct {
 	Activities []string
 }
 
+type ChartPoint struct {
+	X string `json:"x"`
+	Y int    `json:"y"`
+}
+
+type SessionSeries struct {
+	Awake  []ChartPoint
+	Nap    []ChartPoint
+	Settle []ChartPoint
+}
+
 var mealCatalog = []struct {
 	Type     MealType
 	Label    string
@@ -449,6 +460,50 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	return days, nil
 }
 
+// getSessionSeries returns per-session chart points for the last 30 days.
+// Awake: woke_at → duration. Settle: crate_at → duration. Nap: slept_at → duration
+// until next woke_at, but only within the same day (overnight sleeps excluded).
+func getSessionSeries(db *sql.DB) (*SessionSeries, error) {
+	rows, err := db.Query(`
+		SELECT
+			woke_at,
+			crate_at,
+			slept_at,
+			CAST((strftime('%s', slept_at) - strftime('%s', woke_at)) / 60 AS INTEGER),
+			CASE WHEN crate_at IS NOT NULL
+			     THEN CAST((strftime('%s', slept_at) - strftime('%s', crate_at)) / 60 AS INTEGER)
+			     ELSE NULL END,
+			CASE WHEN LEAD(date) OVER (ORDER BY id) = date
+			     THEN CAST((strftime('%s', LEAD(woke_at) OVER (ORDER BY id)) - strftime('%s', slept_at)) / 60 AS INTEGER)
+			     ELSE NULL END
+		FROM sessions
+		WHERE woke_at IS NOT NULL AND slept_at IS NOT NULL
+		  AND date >= date('now', '-30 days')
+		ORDER BY id ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	s := &SessionSeries{}
+	for rows.Next() {
+		var wokeAt, sleptAt string
+		var crateAt sql.NullString
+		var awakeMins int
+		var settleMins, napMins sql.NullInt64
+		if err := rows.Scan(&wokeAt, &crateAt, &sleptAt, &awakeMins, &settleMins, &napMins); err != nil {
+			return nil, err
+		}
+		s.Awake = append(s.Awake, ChartPoint{X: strings.Replace(wokeAt, " ", "T", 1), Y: awakeMins})
+		if settleMins.Valid {
+			s.Settle = append(s.Settle, ChartPoint{X: strings.Replace(crateAt.String, " ", "T", 1), Y: int(settleMins.Int64)})
+		}
+		if napMins.Valid {
+			s.Nap = append(s.Nap, ChartPoint{X: strings.Replace(sleptAt, " ", "T", 1), Y: int(napMins.Int64)})
+		}
+	}
+	return s, rows.Err()
+}
 
 // ── routine_sessions ──────────────────────────────────────────────────────────
 

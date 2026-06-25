@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -49,8 +50,12 @@ type SettingsData struct {
 }
 
 type StatsData struct {
-	Days   []DayStat
-	Config *Config
+	Days       []DayStat
+	Config     *Config
+	Tab        string
+	AwakeJSON  template.JS
+	NapJSON    template.JS
+	SettleJSON template.JS
 }
 
 func buildPageData(db *sql.DB, date string) (*PageData, error) {
@@ -421,8 +426,27 @@ func (a *App) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	tab := r.URL.Query().Get("tab")
+	if tab != "graph" {
+		tab = "log"
+	}
+	sd := &StatsData{Days: days, Config: cfg, Tab: tab}
+	if tab == "graph" {
+		series, err := getSessionSeries(a.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		mustJSON := func(v any) template.JS {
+			b, _ := json.Marshal(v)
+			return template.JS(b)
+		}
+		sd.AwakeJSON = mustJSON(series.Awake)
+		sd.NapJSON = mustJSON(series.Nap)
+		sd.SettleJSON = mustJSON(series.Settle)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := a.tmpl.ExecuteTemplate(w, "stats-page", &StatsData{Days: days, Config: cfg}); err != nil {
+	if err := a.tmpl.ExecuteTemplate(w, "stats-page", sd); err != nil {
 		log.Printf("stats template: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
