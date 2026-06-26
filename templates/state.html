@@ -48,6 +48,7 @@
     {{end}}{{end}}
 
     {{template "time-adjust" dict "Endpoint" "/api/crate-adjust" "Label" "In crate at" "Time" .LastCrateAt}}
+    {{template "undo-phase" .}}
 </div>
 
 {{else if isPhase .Phase "SLEEPING"}}
@@ -95,6 +96,7 @@
     </div>
 
     {{template "time-adjust" dict "Endpoint" "/api/sleep-adjust" "Label" "Fell asleep at" "Time" .LastSleptAt}}
+    {{template "undo-phase" .}}
 </div>
 
 {{else}}
@@ -142,6 +144,7 @@
     {{end}}{{end}}
 
     {{template "time-adjust" dict "Endpoint" "/api/wake-adjust" "Label" "Woke up at" "Time" .LastWokeAt}}
+    {{template "undo-phase" .}}
 </div>
 {{end}}
 {{end}}{{/* end IsToday */}}

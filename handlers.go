@@ -379,7 +379,12 @@ func (a *App) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	today := time.Now().Format("2006-01-02")
+	// Wakes before 06:00 local belong to the previous calendar day
+	now := time.Now().Local()
+	today := now.Format("2006-01-02")
+	if now.Hour() < 4 {
+		today = now.AddDate(0, 0, -1).Format("2006-01-02")
+	}
 
 	switch phase {
 	case PhaseActive:
@@ -402,6 +407,29 @@ func (a *App) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	a.renderStateFragment(w)
+}
+
+func (a *App) handleUndoPhase(w http.ResponseWriter, r *http.Request) {
+	var id int
+	var crateAt, sleptAt sql.NullString
+	err := a.db.QueryRow(`SELECT id, crate_at, slept_at FROM sessions ORDER BY id DESC LIMIT 1`).Scan(&id, &crateAt, &sleptAt)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if sleptAt.Valid {
+		_, err = a.db.Exec(`UPDATE sessions SET slept_at = NULL WHERE id = ?`, id)
+	} else if crateAt.Valid {
+		_, err = a.db.Exec(`UPDATE sessions SET crate_at = NULL WHERE id = ?`, id)
+	} else {
+		_, err = a.db.Exec(`DELETE FROM sessions WHERE id = ?`, id)
+	}
+	if err != nil {
+		log.Printf("handleUndoPhase: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	a.renderStateFragment(w)
 }
 
