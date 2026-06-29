@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -87,9 +88,11 @@ type DayStat struct {
 }
 
 type Config struct {
-	PuppyName    string
-	AwakeMinutes int
-	NapMinutes   int
+	PuppyName        string
+	AwakeMinutes     int
+	NapMinutes       int
+	WindDownMinutes  int
+	NtfyTopic        string
 }
 
 type RoutineSession struct {
@@ -674,7 +677,7 @@ func getConfig(db *sql.DB) (*Config, error) {
 	}
 	defer rows.Close()
 
-	c := &Config{PuppyName: "Nova", AwakeMinutes: 40, NapMinutes: 90}
+	c := &Config{PuppyName: "Nova", AwakeMinutes: 40, NapMinutes: 90, WindDownMinutes: 25}
 	for rows.Next() {
 		var k, v string
 		if err := rows.Scan(&k, &v); err != nil {
@@ -693,6 +696,12 @@ func getConfig(db *sql.DB) (*Config, error) {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				c.NapMinutes = n
 			}
+		case "wind_down_minutes":
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				c.WindDownMinutes = n
+			}
+		case "ntfy_topic":
+			c.NtfyTopic = v
 		}
 	}
 	return c, rows.Err()
@@ -703,6 +712,7 @@ func saveConfig(db *sql.DB, c *Config) error {
 		{"puppy_name", c.PuppyName},
 		{"awake_minutes", strconv.Itoa(c.AwakeMinutes)},
 		{"nap_minutes", strconv.Itoa(c.NapMinutes)},
+		{"wind_down_minutes", strconv.Itoa(c.WindDownMinutes)},
 	}
 	for _, kv := range pairs {
 		_, err := db.Exec(
@@ -1033,6 +1043,54 @@ func logNightToilet(db *sql.DB, toilet string) error {
 		`INSERT INTO night_toilets (occurred_at, toilet, toilet_pee, toilet_poop, toilet_accident) VALUES (?, ?, ?, ?, ?)`,
 		time.Now().UTC().Format("2006-01-02 15:04:05"), toilet, pee, poop, accident,
 	)
+	return err
+}
+
+func ensureNtfyTopic(db *sql.DB) error {
+	cfg, err := getConfig(db)
+	if err != nil {
+		return err
+	}
+	if cfg.NtfyTopic != "" {
+		return nil
+	}
+	b := make([]byte, 5)
+	if _, err := rand.Read(b); err != nil {
+		return err
+	}
+	topic := fmt.Sprintf("puppy-%x", b)
+	_, err = db.Exec(
+		`INSERT INTO config (key, value) VALUES ('ntfy_topic', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		topic,
+	)
+	return err
+}
+
+func getSessionsNeedingNotification(db *sql.DB, afterMinutes int) ([]int, error) {
+	rows, err := db.Query(`
+		SELECT id FROM sessions
+		WHERE woke_at IS NOT NULL
+		  AND slept_at IS NULL
+		  AND awake_notified = 0
+		  AND woke_at <= datetime('now', '-' || ? || ' minutes')
+	`, afterMinutes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func markSessionNotified(db *sql.DB, id int) error {
+	_, err := db.Exec(`UPDATE sessions SET awake_notified = 1 WHERE id = ?`, id)
 	return err
 }
 

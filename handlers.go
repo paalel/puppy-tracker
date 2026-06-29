@@ -77,7 +77,52 @@ type dailyHours struct {
 	Y float64 `json:"y"`
 }
 
+func sendNtfyNotification(topic, title, message string) error {
+	req, err := http.NewRequest("POST", "https://ntfy.sh/"+topic, strings.NewReader(message))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Title", title)
+	req.Header.Set("Content-Type", "text/plain")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("ntfy returned %d", resp.StatusCode)
+	}
+	return nil
+}
 
+func startNotificationWorker(db *sql.DB) {
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			cfg, err := getConfig(db)
+			if err != nil || cfg.NtfyTopic == "" {
+				continue
+			}
+			ids, err := getSessionsNeedingNotification(db, cfg.WindDownMinutes)
+			if err != nil {
+				log.Printf("notification worker: %v", err)
+				continue
+			}
+			for _, id := range ids {
+				title := "Time to wind down"
+				body := fmt.Sprintf("%s has been awake for %d minutes", cfg.PuppyName, cfg.WindDownMinutes)
+				if err := sendNtfyNotification(cfg.NtfyTopic, title, body); err != nil {
+					log.Printf("ntfy send: %v", err)
+					continue
+				}
+				if err := markSessionNotified(db, id); err != nil {
+					log.Printf("ntfy mark notified: %v", err)
+				}
+			}
+		}
+	}()
+}
 
 func buildPageData(db *sql.DB, date string) (*PageData, error) {
 	now := time.Now()
@@ -126,7 +171,7 @@ func buildPageData(db *sql.DB, date string) (*PageData, error) {
 		e := now.Sub(state.PhaseStartedAt.Local())
 		elapsed = formatDuration(e)
 		phase = state.Phase
-		shouldWindDown = phase == PhaseActive && e >= time.Duration(cfg.AwakeMinutes-15)*time.Minute
+		shouldWindDown = phase == PhaseActive && e >= time.Duration(cfg.WindDownMinutes)*time.Minute
 
 		for i := len(dbSessions) - 1; i >= 0; i-- {
 			if lastWokeAt == nil && dbSessions[i].WokeAt != nil {
@@ -332,6 +377,7 @@ func (a *App) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("puppy_name"))
 	awakeMins, _ := strconv.Atoi(r.FormValue("awake_minutes"))
 	napMins, _ := strconv.Atoi(r.FormValue("nap_minutes"))
+	windDownMins, _ := strconv.Atoi(r.FormValue("wind_down_minutes"))
 
 	// Fall back to existing config rather than hardcoding defaults
 	current, err := getConfig(a.db)
@@ -348,8 +394,11 @@ func (a *App) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	if napMins <= 0 {
 		napMins = current.NapMinutes
 	}
+	if windDownMins <= 0 {
+		windDownMins = current.WindDownMinutes
+	}
 
-	cfg := &Config{PuppyName: name, AwakeMinutes: awakeMins, NapMinutes: napMins}
+	cfg := &Config{PuppyName: name, AwakeMinutes: awakeMins, NapMinutes: napMins, WindDownMinutes: windDownMins}
 	if err := saveConfig(a.db, cfg); err != nil {
 		log.Printf("saveConfig: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
