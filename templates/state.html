@@ -29,7 +29,6 @@
         <span class="ml-auto text-sm font-mono text-stone-400">{{.Elapsed}}</span>
     </div>
     <h2 class="text-xl font-semibold text-stone-800 mb-4">Waiting to fall asleep</h2>
-
     <form hx-post="/api/phase" hx-target="#state-container" hx-swap="innerHTML">
         <input type="hidden" name="phase" value="SLEEPING">
         <button type="submit"
@@ -37,20 +36,7 @@
             Puppy Fell Asleep
         </button>
     </form>
-
-    {{with currentSession .Sessions}}{{if .ID}}
-    <div class="mt-4 pt-4 border-t border-stone-100">
-        <p class="section-label">Toilet</p>
-        {{template "toilet-buttons" .}}
-        <p class="section-label">Activity</p>
-        {{template "activity-toggles" .}}
-        <p class="section-label">Training</p>
-        {{template "training-quality" .}}
-        <p class="section-label">Put to sleep</p>
-        {{template "sleep-ease" .}}
-    </div>
-    {{end}}{{end}}
-
+    {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "session-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/crate-adjust" "Label" "In crate at" "Time" .LastCrateAt}}
     {{template "undo-phase" .}}
 </div>
@@ -63,7 +49,6 @@
         <span class="ml-auto text-sm font-mono text-stone-400">{{.Elapsed}}</span>
     </div>
     <h2 class="text-xl font-semibold text-stone-800 mb-4">{{.Config.PuppyName}} is resting</h2>
-
     {{with nextSession .Sessions}}
     <div class="bg-stone-50 border border-stone-100 rounded-xl p-3 mb-4">
         <p class="text-xs text-stone-400 mb-1">Next up — ~{{fmtPlan .PlannedWake}}</p>
@@ -75,7 +60,6 @@
         </ul>
     </div>
     {{end}}
-
     <form hx-post="/api/phase" hx-target="#state-container" hx-swap="innerHTML">
         <input type="hidden" name="phase" value="ACTIVE">
         <button type="submit"
@@ -83,7 +67,6 @@
             {{.Config.PuppyName}} Woke Up
         </button>
     </form>
-
     {{if .IsNight}}
     <div class="mt-4 pt-4 border-t border-stone-100">
         <p class="section-label">Night toilet</p>
@@ -100,7 +83,7 @@
         </div>
     </div>
     {{end}}
-
+    {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "session-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/sleep-adjust" "Label" "Fell asleep at" "Time" .LastSleptAt}}
     {{template "undo-phase" .}}
 </div>
@@ -113,7 +96,6 @@
         <span class="ml-auto text-sm font-mono text-stone-400">{{.Elapsed}}</span>
     </div>
     <h2 class="text-xl font-semibold text-stone-800 mb-1">{{.Config.PuppyName}} is awake</h2>
-
     {{with currentSession .Sessions}}
     <p class="text-xs text-stone-400 mb-3 uppercase tracking-wide">{{.Label}}</p>
     <ul class="mb-4 space-y-1.5">
@@ -122,14 +104,12 @@
         {{end}}
     </ul>
     {{end}}
-
     {{if .ShouldWindDown}}
     <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4">
         <p class="text-sm font-medium text-amber-800 mb-1.5">Time to wind down</p>
         <p class="text-xs text-stone-400 mt-2">Be calm, and use treats to help {{.Config.PuppyName}} settle down</p>
     </div>
     {{end}}
-
     <form hx-post="/api/phase" hx-target="#state-container" hx-swap="innerHTML">
         <input type="hidden" name="phase" value="CRATING">
         <button type="submit"
@@ -137,20 +117,7 @@
             Put in Crate
         </button>
     </form>
-
-    {{with currentSession .Sessions}}{{if .ID}}
-    <div class="mt-4 pt-4 border-t border-stone-100">
-        <p class="section-label">Toilet</p>
-        {{template "toilet-buttons" .}}
-        <p class="section-label">Activity</p>
-        {{template "activity-toggles" .}}
-        <p class="section-label">Training</p>
-        {{template "training-quality" .}}
-        <p class="section-label">Put to sleep</p>
-        {{template "sleep-ease" .}}
-    </div>
-    {{end}}{{end}}
-
+    {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "session-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/wake-adjust" "Label" "Woke up at" "Time" .LastWokeAt}}
     {{template "undo-phase" .}}
 </div>
@@ -247,23 +214,7 @@
             {{end}}
             {{if .ID}}
             {{if $.IsToday}}
-            <p class="section-label">Put to sleep</p>
-            {{template "sleep-ease" .}}
-            <p class="section-label">Activity</p>
-            {{template "activity-toggles" .}}
-            <p class="section-label">Training</p>
-            {{template "training-quality" .}}
-            <p class="section-label">Toilet</p>
-            {{template "toilet-buttons" .}}
-            <p class="section-label">Comment</p>
-            <textarea name="comment" placeholder="Add a note…"
-                hx-post="/api/session/{{.ID}}/comment"
-                hx-target="#state-container"
-                hx-swap="innerHTML"
-                hx-trigger="change"
-                oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
-                rows="1"
-                class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.Comment}}</textarea>
+            {{template "session-fields" .}}
             {{else}}
             {{if or .SleepEase .Overtired .PhysicalActivity .MentalActivity .EnvironmentalActivity .CalmWinddown .TrainingQuality .ToiletPee .ToiletPoop .ToiletAccident}}
             <div class="flex items-center gap-1 mt-2 flex-wrap">

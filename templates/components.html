@@ -90,6 +90,25 @@
 </div>
 {{end}}
 
+{{define "session-fields"}}
+{{/* expects a SessionView — shared controls used in both current and past session cards */}}
+<p class="section-label">Toilet</p>
+{{template "toilet-buttons" .}}
+<p class="section-label">Activity</p>
+{{template "activity-toggles" .}}
+<p class="section-label">Training</p>
+{{template "training-quality" .}}
+<p class="section-label">Put to sleep</p>
+{{template "sleep-ease" .}}
+<p class="section-label">Comment</p>
+<textarea name="comment" placeholder="Add a note…"
+    hx-post="/api/session/{{.ID}}/comment"
+    hx-target="#state-container" hx-swap="innerHTML" hx-trigger="change"
+    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+    rows="1"
+    class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.Comment}}</textarea>
+{{end}}
+
 {{define "time-adjust"}}
 {{/* expects dict with Endpoint string, Label string, Time *time.Time */}}
 {{if .Time}}
