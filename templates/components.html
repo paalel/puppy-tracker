@@ -58,6 +58,21 @@
 </form>
 {{end}}
 
+{{define "activity-toggles"}}
+{{/* expects a SessionView with .ID, .PhysicalActivity, .MentalActivity, .CalmWinddown */}}
+<div class="flex items-center gap-1">
+    <form hx-post="/api/session/{{.ID}}/physical-activity" hx-target="#state-container" hx-swap="innerHTML">
+        <button type="submit" class="btn-badge {{if .PhysicalActivity}}bg-sky-100 text-sky-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Physical</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/mental-activity" hx-target="#state-container" hx-swap="innerHTML">
+        <button type="submit" class="btn-badge {{if .MentalActivity}}bg-violet-100 text-violet-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Mental</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/calm-winddown" hx-target="#state-container" hx-swap="innerHTML">
+        <button type="submit" class="btn-badge {{if .CalmWinddown}}bg-teal-100 text-teal-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Calm wind-down</button>
+    </form>
+</div>
+{{end}}
+
 {{define "sleep-ease"}}
 {{/* expects a SessionView with .ID, .SleepEase, .Overtired */}}
 <div class="flex items-center gap-1">

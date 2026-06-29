@@ -109,22 +109,39 @@
                 options: Object.assign({}, OPTS, { scales: { x: timeX, y: minY('h') } }),
             });
 
-            // 2. Settle time over time — colored by sleep ease
-            new Chart(document.getElementById('settleChart'), {
-                type: 'scatter',
-                data: { datasets: [
-                    { label: 'Easy',      data: {{.SettleEasyJSON}}, backgroundColor: 'rgba(16,185,129,0.8)',  borderColor: 'rgb(16,185,129)',  pointRadius: 5 },
-                    { label: 'OK',        data: {{.SettleOkJSON}},   backgroundColor: 'rgba(245,158,11,0.8)', borderColor: 'rgb(245,158,11)', pointRadius: 5 },
-                    { label: 'Hard',      data: {{.SettleHardJSON}}, backgroundColor: 'rgba(244,63,94,0.8)',  borderColor: 'rgb(244,63,94)',  pointRadius: 5 },
-                    { label: 'Unlogged', data: {{.SettleNoneJSON}}, backgroundColor: 'rgba(168,162,158,0.5)', borderColor: 'rgb(168,162,158)', pointRadius: 4 },
-                ]},
-                options: Object.assign({}, OPTS, {
-                    plugins: {
-                        legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
-                    },
-                    scales: { x: timeX, y: minY('m') },
-                }),
-            });
+            // 2. Settle time over time — colored by sleep ease + 5-session rolling average
+            (function() {
+                var allSettle = [].concat(
+                    {{.SettleEasyJSON}},
+                    {{.SettleOkJSON}},
+                    {{.SettleHardJSON}},
+                    {{.SettleNoneJSON}}
+                ).sort(function(a, b) { return a.x < b.x ? -1 : 1; });
+                var WINDOW = 5;
+                var rolling = allSettle.map(function(p, i) {
+                    var slice = allSettle.slice(Math.max(0, i - WINDOW + 1), i + 1);
+                    var avg = slice.reduce(function(s, q) { return s + q.y; }, 0) / slice.length;
+                    return { x: p.x, y: Math.round(avg * 10) / 10 };
+                });
+                new Chart(document.getElementById('settleChart'), {
+                    type: 'scatter',
+                    data: { datasets: [
+                        { label: 'Easy',     data: {{.SettleEasyJSON}}, backgroundColor: 'rgba(16,185,129,0.7)',  borderColor: 'rgb(16,185,129)',   pointRadius: 4 },
+                        { label: 'OK',       data: {{.SettleOkJSON}},   backgroundColor: 'rgba(245,158,11,0.7)', borderColor: 'rgb(245,158,11)',  pointRadius: 4 },
+                        { label: 'Hard',     data: {{.SettleHardJSON}}, backgroundColor: 'rgba(244,63,94,0.7)',  borderColor: 'rgb(244,63,94)',   pointRadius: 4 },
+                        { label: 'Unlogged', data: {{.SettleNoneJSON}}, backgroundColor: 'rgba(168,162,158,0.4)', borderColor: 'rgb(168,162,158)', pointRadius: 3 },
+                        { label: '5-session avg', data: rolling, type: 'line',
+                          borderColor: 'rgb(99,102,241)', backgroundColor: 'transparent',
+                          borderWidth: 2, pointRadius: 0, tension: 0.4, showLine: true },
+                    ]},
+                    options: Object.assign({}, OPTS, {
+                        plugins: {
+                            legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+                        },
+                        scales: { x: timeX, y: minY('m') },
+                    }),
+                });
+            })();
 
             // 3. Nap duration by time of day — expected value + opacity by count
             (function() {

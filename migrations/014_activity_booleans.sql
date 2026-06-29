@@ -1,0 +1,3 @@
+ALTER TABLE sessions ADD COLUMN physical_activity  INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN mental_activity    INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN calm_winddown      INTEGER NOT NULL DEFAULT 0;
