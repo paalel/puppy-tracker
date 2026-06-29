@@ -64,9 +64,10 @@ type DBSession struct {
 	ToiletPoop       bool
 	ToiletAccident   bool
 	TrainingQuality  string // "", "sharp", "ok", "distracted"
-	PhysicalActivity bool
-	MentalActivity   bool
-	CalmWinddown     bool
+	PhysicalActivity       bool
+	MentalActivity         bool
+	CalmWinddown           bool
+	EnvironmentalActivity  bool
 }
 
 type DayStat struct {
@@ -298,7 +299,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		       COALESCE(training_quality, ''),
 		       COALESCE(physical_activity, 0),
 		       COALESCE(mental_activity, 0),
-		       COALESCE(calm_winddown, 0)
+		       COALESCE(calm_winddown, 0),
+		       COALESCE(environmental_activity, 0)
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
 		return nil, err
@@ -313,8 +315,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var routineSessionID sql.NullInt64
 		var overtiredInt int
 		var peeInt, poopInt, accidentInt int
-		var physicalInt, mentalInt, calmInt int
-		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &peeInt, &poopInt, &accidentInt, &s.TrainingQuality, &physicalInt, &mentalInt, &calmInt); err != nil {
+		var physicalInt, mentalInt, calmInt, environmentalInt int
+		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &peeInt, &poopInt, &accidentInt, &s.TrainingQuality, &physicalInt, &mentalInt, &calmInt, &environmentalInt); err != nil {
 			return nil, err
 		}
 		if routineSessionID.Valid {
@@ -328,6 +330,7 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		s.PhysicalActivity = physicalInt == 1
 		s.MentalActivity = mentalInt == 1
 		s.CalmWinddown = calmInt == 1
+		s.EnvironmentalActivity = environmentalInt == 1
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}

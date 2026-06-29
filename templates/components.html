@@ -67,6 +67,9 @@
     <form hx-post="/api/session/{{.ID}}/mental-activity" hx-target="#state-container" hx-swap="innerHTML">
         <button type="submit" class="btn-badge {{if .MentalActivity}}bg-violet-100 text-violet-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Mental</button>
     </form>
+    <form hx-post="/api/session/{{.ID}}/environmental-activity" hx-target="#state-container" hx-swap="innerHTML">
+        <button type="submit" class="btn-badge {{if .EnvironmentalActivity}}bg-orange-100 text-orange-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Environmental</button>
+    </form>
     <form hx-post="/api/session/{{.ID}}/calm-winddown" hx-target="#state-container" hx-swap="innerHTML">
         <button type="submit" class="btn-badge {{if .CalmWinddown}}bg-teal-100 text-teal-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Calm wind-down</button>
     </form>

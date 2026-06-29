@@ -68,10 +68,11 @@ type SessionView struct {
 	ToiletPoop      bool
 	ToiletAccident  bool
 	TrainingQuality  string
-	PhysicalActivity bool
-	MentalActivity   bool
-	CalmWinddown     bool
-	ActualCrate      *time.Time
+	PhysicalActivity      bool
+	MentalActivity        bool
+	CalmWinddown          bool
+	EnvironmentalActivity bool
+	ActualCrate           *time.Time
 	SleepDuration   string
 	SettleDuration  string
 }
@@ -147,7 +148,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 		var id int
 		var comment, sleepEase, trainingQuality string
 		var overtired, toiletPee, toiletPoop, toiletAccident bool
-		var physicalActivity, mentalActivity, calmWinddown bool
+		var physicalActivity, mentalActivity, calmWinddown, environmentalActivity bool
 		var ac *time.Time
 		if dbSess != nil {
 			id = dbSess.ID
@@ -161,6 +162,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			physicalActivity = dbSess.PhysicalActivity
 			mentalActivity = dbSess.MentalActivity
 			calmWinddown = dbSess.CalmWinddown
+			environmentalActivity = dbSess.EnvironmentalActivity
 			ac = dbSess.CrateAt
 		}
 
@@ -195,8 +197,9 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			TrainingQuality:  trainingQuality,
 			PhysicalActivity: physicalActivity,
 			MentalActivity:   mentalActivity,
-			CalmWinddown:     calmWinddown,
-			SettleDuration:   settleDuration,
+			CalmWinddown:          calmWinddown,
+			EnvironmentalActivity: environmentalActivity,
+			SettleDuration:        settleDuration,
 		}
 	}
 
