@@ -29,6 +29,9 @@ func main() {
 	if err := seedDefaultRoutine(db); err != nil {
 		log.Fatalf("seed routine: %v", err)
 	}
+	if err := ensureNtfyTopic(db); err != nil {
+		log.Fatalf("ensure ntfy topic: %v", err)
+	}
 
 	tmpl, err := parseTemplates()
 	if err != nil {
@@ -36,6 +39,7 @@ func main() {
 	}
 
 	app := &App{db: db, tmpl: tmpl}
+	startNotificationWorker(db)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {

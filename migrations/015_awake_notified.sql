@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN awake_notified INTEGER NOT NULL DEFAULT 0;
