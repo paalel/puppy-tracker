@@ -23,33 +23,9 @@ const (
 	PhaseSleeping Phase = "SLEEPING"
 )
 
-type MealAmount string
-
-const (
-	AmountNothing    MealAmount = "nothing"
-	AmountTooLittle  MealAmount = "too_little"
-	AmountPrettyGood MealAmount = "pretty_good"
-	AmountFullMeal   MealAmount = "full_meal"
-)
-
-type MealType string
-
-const (
-	MealBreakfast MealType = "breakfast"
-	MealLunch     MealType = "lunch"
-	MealDinner    MealType = "dinner"
-)
-
 type PuppyState struct {
 	Phase          Phase
 	PhaseStartedAt time.Time
-}
-
-type MealEntry struct {
-	Type     MealType
-	Label    string
-	Deadline string
-	Amount   MealAmount
 }
 
 type DBSession struct {
@@ -121,16 +97,6 @@ type SessionSeries struct {
 	SettleHard  []ChartPoint
 	SettleNone  []ChartPoint
 	NapByTime   []NumericPoint // x = local hour (0–24), y = nap minutes
-}
-
-var mealCatalog = []struct {
-	Type     MealType
-	Label    string
-	Deadline string
-}{
-	{MealBreakfast, "Breakfast", "10:00"},
-	{MealLunch, "Lunch", "14:30"},
-	{MealDinner, "Dinner", "19:00"},
 }
 
 func initDB(db *sql.DB) error {
@@ -729,50 +695,6 @@ func saveConfig(db *sql.DB, c *Config) error {
 		}
 	}
 	return nil
-}
-
-// ── meals ─────────────────────────────────────────────────────────────────────
-
-func getMeals(db *sql.DB, date string) ([]MealEntry, error) {
-	rows, err := db.Query(`SELECT meal_type, amount FROM meals WHERE date = ?`, date)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	recorded := make(map[MealType]MealAmount)
-	for rows.Next() {
-		var mt MealType
-		var amt MealAmount
-		if err := rows.Scan(&mt, &amt); err != nil {
-			return nil, err
-		}
-		recorded[mt] = amt
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	meals := make([]MealEntry, len(mealCatalog))
-	for i, c := range mealCatalog {
-		amt := AmountNothing
-		if a, ok := recorded[c.Type]; ok {
-			amt = a
-		}
-		meals[i] = MealEntry{Type: c.Type, Label: c.Label, Deadline: c.Deadline, Amount: amt}
-	}
-	return meals, nil
-}
-
-func setMeal(db *sql.DB, date string, mealType MealType, amount MealAmount) error {
-	_, err := db.Exec(`
-		INSERT INTO meals (date, meal_type, amount, updated_at)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(date, meal_type) DO UPDATE SET
-			amount     = excluded.amount,
-			updated_at = excluded.updated_at
-	`, date, mealType, amount, nowUTC())
-	return err
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

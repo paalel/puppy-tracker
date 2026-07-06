@@ -61,7 +61,6 @@ func main() {
 	mux.HandleFunc("GET /api/state", app.handleGetState)
 	mux.HandleFunc("POST /api/phase", app.handlePostPhase)
 	mux.HandleFunc("POST /api/phase/undo", app.handleUndoPhase)
-	mux.HandleFunc("POST /api/meal", app.handlePostMeal)
 	mux.HandleFunc("POST /api/wake-adjust", app.handleAdjustSessionTime("woke_at"))
 	mux.HandleFunc("POST /api/crate-adjust", app.handleAdjustSessionTime("crate_at"))
 	mux.HandleFunc("POST /api/sleep-adjust", app.handleAdjustSessionTime("slept_at"))

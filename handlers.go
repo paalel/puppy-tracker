@@ -30,7 +30,6 @@ type PageData struct {
 	Phase          Phase
 	Elapsed        string
 	Sessions       []SessionView
-	Meals          []MealEntry
 	Config         *Config
 	LastWokeAt     *time.Time
 	LastSleptAt    *time.Time
@@ -153,11 +152,6 @@ func buildPageData(db *sql.DB, date string) (*PageData, error) {
 		return nil, fmt.Errorf("get routine sessions: %w", err)
 	}
 
-	meals, err := getMeals(db, date)
-	if err != nil {
-		return nil, fmt.Errorf("get meals: %w", err)
-	}
-
 	var phase Phase
 	var elapsed string
 	var shouldWindDown bool
@@ -204,7 +198,6 @@ func buildPageData(db *sql.DB, date string) (*PageData, error) {
 		Phase:          phase,
 		Elapsed:        elapsed,
 		Sessions:       buildSchedule(date, dbSessions, routineSessions, cfg),
-		Meals:          meals,
 		Config:         cfg,
 		LastWokeAt:     lastWokeAt,
 		LastCrateAt:    lastCrateAt,
@@ -225,9 +218,6 @@ func parseTemplates() (*template.Template, error) {
 	funcs := template.FuncMap{
 		"isPhase": func(p Phase, name string) bool {
 			return p == Phase(name)
-		},
-		"isSelected": func(current MealAmount, checking string) bool {
-			return current == MealAmount(checking)
 		},
 		"isPastDeadline": func(deadline string) bool {
 			now := time.Now()
@@ -493,35 +483,6 @@ func (a *App) handleUndoPhase(w http.ResponseWriter, r *http.Request) {
 	a.renderStateFragment(w)
 }
 
-func (a *App) handlePostMeal(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	mealType := MealType(r.FormValue("meal"))
-	amount := MealAmount(r.FormValue("amount"))
-	today := time.Now().Format("2006-01-02")
-
-	switch mealType {
-	case MealBreakfast, MealLunch, MealDinner:
-	default:
-		http.Error(w, "invalid meal", http.StatusBadRequest)
-		return
-	}
-	switch amount {
-	case AmountNothing, AmountTooLittle, AmountPrettyGood, AmountFullMeal:
-	default:
-		http.Error(w, "invalid amount", http.StatusBadRequest)
-		return
-	}
-
-	if err := setMeal(a.db, today, mealType, amount); err != nil {
-		log.Printf("setMeal: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	a.renderStateFragment(w)
-}
 
 func (a *App) handleAdjustSessionTime(column string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

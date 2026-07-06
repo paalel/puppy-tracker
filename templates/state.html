@@ -225,52 +225,6 @@
     </div>
 </div>
 
-{{/* ── Meals ────────────────────────────────────────────────────────────────── */}}
-<div class="card overflow-hidden mb-4">
-    <div class="px-4 pt-4 pb-3 border-b border-stone-100">
-        <h2 class="card-heading">Meals</h2>
-    </div>
-    <div class="divide-y divide-stone-50">
-    {{range .Meals}}
-    <div class="px-4 py-3">
-        <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-stone-700">{{.Label}}</span>
-            {{if $.IsToday}}
-            <span class="text-xs font-mono {{if isPastDeadline .Deadline}}text-rose-400{{else}}text-stone-400{{end}}">
-                {{if isPastDeadline .Deadline}}⚠ {{end}}{{.Deadline}}
-            </span>
-            {{end}}
-        </div>
-        {{if $.IsToday}}
-        <div class="grid grid-cols-4 gap-1">
-            <form class="contents" hx-post="/api/meal" hx-target="#state-container" hx-swap="innerHTML">
-                <input type="hidden" name="meal" value="{{.Type}}">
-                <button name="amount" value="nothing" type="submit"
-                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "nothing"}}bg-stone-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">None</button>
-                <button name="amount" value="too_little" type="submit"
-                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "too_little"}}bg-amber-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">Little</button>
-                <button name="amount" value="pretty_good" type="submit"
-                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "pretty_good"}}bg-sky-500 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">Good</button>
-                <button name="amount" value="full_meal" type="submit"
-                    class="py-1.5 text-xs rounded-lg font-medium transition-colors select-none
-                    {{if isSelected .Amount "full_meal"}}bg-emerald-600 text-white{{else}}bg-stone-100 text-stone-500 hover:bg-stone-200{{end}}">Full</button>
-            </form>
-        </div>
-        {{else}}
-        <div class="grid grid-cols-4 gap-1">
-            <span class="py-1.5 text-xs rounded-lg font-medium text-center {{if isSelected .Amount "nothing"}}bg-stone-600 text-white{{else}}bg-stone-100 text-stone-400{{end}}">None</span>
-            <span class="py-1.5 text-xs rounded-lg font-medium text-center {{if isSelected .Amount "too_little"}}bg-amber-500 text-white{{else}}bg-stone-100 text-stone-400{{end}}">Little</span>
-            <span class="py-1.5 text-xs rounded-lg font-medium text-center {{if isSelected .Amount "pretty_good"}}bg-sky-500 text-white{{else}}bg-stone-100 text-stone-400{{end}}">Good</span>
-            <span class="py-1.5 text-xs rounded-lg font-medium text-center {{if isSelected .Amount "full_meal"}}bg-emerald-600 text-white{{else}}bg-stone-100 text-stone-400{{end}}">Full</span>
-        </div>
-        {{end}}
-    </div>
-    {{end}}
-    </div>
-</div>
 
 <script>
 document.querySelectorAll('textarea').forEach(function(ta) {
