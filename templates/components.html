@@ -107,6 +107,15 @@
     oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
     rows="1"
     class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.Comment}}</textarea>
+<div class="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between">
+    <span class="text-xs text-stone-400">Exclude from stats</span>
+    <form hx-post="/api/session/{{.ID}}/excluded" hx-target="#state-container" hx-swap="innerHTML">
+        <button type="submit"
+            class="btn-badge {{if .Excluded}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-rose-600{{end}}">
+            {{if .Excluded}}Re-include{{else}}Exclude{{end}}
+        </button>
+    </form>
+</div>
 {{end}}
 
 {{define "time-adjust"}}

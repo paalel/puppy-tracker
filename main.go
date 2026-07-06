@@ -75,6 +75,7 @@ func main() {
 	mux.HandleFunc("POST /api/session/{id}/mental-activity", app.handleToggleSessionBool("mental_activity"))
 	mux.HandleFunc("POST /api/session/{id}/calm-winddown", app.handleToggleSessionBool("calm_winddown"))
 	mux.HandleFunc("POST /api/session/{id}/environmental-activity", app.handleToggleSessionBool("environmental_activity"))
+	mux.HandleFunc("POST /api/session/{id}/excluded", app.handleToggleSessionBool("excluded"))
 	mux.HandleFunc("POST /api/night-toilet", app.handleNightToilet)
 
 	log.Println("Puppy Routine Tracker listening on :8080")

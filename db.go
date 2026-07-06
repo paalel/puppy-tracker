@@ -69,6 +69,7 @@ type DBSession struct {
 	MentalActivity         bool
 	CalmWinddown           bool
 	EnvironmentalActivity  bool
+	Excluded               bool
 }
 
 type DayStat struct {
@@ -303,7 +304,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		       COALESCE(physical_activity, 0),
 		       COALESCE(mental_activity, 0),
 		       COALESCE(calm_winddown, 0),
-		       COALESCE(environmental_activity, 0)
+		       COALESCE(environmental_activity, 0),
+		       COALESCE(excluded, 0)
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
 		return nil, err
@@ -318,8 +320,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		var routineSessionID sql.NullInt64
 		var overtiredInt int
 		var peeInt, poopInt, accidentInt int
-		var physicalInt, mentalInt, calmInt, environmentalInt int
-		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &peeInt, &poopInt, &accidentInt, &s.TrainingQuality, &physicalInt, &mentalInt, &calmInt, &environmentalInt); err != nil {
+		var physicalInt, mentalInt, calmInt, environmentalInt, excludedInt int
+		if err := rows.Scan(&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt, &s.Comment, &s.SleepEase, &overtiredInt, &peeInt, &poopInt, &accidentInt, &s.TrainingQuality, &physicalInt, &mentalInt, &calmInt, &environmentalInt, &excludedInt); err != nil {
 			return nil, err
 		}
 		if routineSessionID.Valid {
@@ -334,6 +336,7 @@ func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 		s.MentalActivity = mentalInt == 1
 		s.CalmWinddown = calmInt == 1
 		s.EnvironmentalActivity = environmentalInt == 1
+		s.Excluded = excludedInt == 1
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}
@@ -405,7 +408,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			SUM(CASE WHEN overtired = 1          THEN 1 ELSE 0 END) AS overtired_count,
 			SUM(CASE WHEN toilet_accident = 1    THEN 1 ELSE 0 END) AS accident_count
 		FROM sessions
-		WHERE slept_at IS NOT NULL
+		WHERE slept_at IS NOT NULL AND excluded = 0
 		GROUP BY date
 		ORDER BY date DESC
 		LIMIT 30
@@ -450,7 +453,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			INNER JOIN sessions s2
 			       ON  s2.date = s1.date
 			       AND s2.id   = (SELECT MIN(id) FROM sessions WHERE date = s1.date AND id > s1.id AND woke_at IS NOT NULL)
-			WHERE s1.slept_at IS NOT NULL AND nap_secs > 0
+			WHERE s1.slept_at IS NOT NULL AND s1.excluded = 0 AND s2.excluded = 0 AND nap_secs > 0
 		) GROUP BY date
 	`)
 	if err != nil {
@@ -465,7 +468,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			SELECT date,
 			       CAST(strftime('%s', slept_at) AS INTEGER) - CAST(strftime('%s', crate_at) AS INTEGER) AS settle_secs
 			FROM sessions
-			WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL AND settle_secs > 0
+			WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0 AND settle_secs > 0
 		) GROUP BY date
 	`)
 	if err != nil {
@@ -497,6 +500,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			  AND s2.id = (SELECT MIN(id) FROM sessions s4 WHERE s4.date = s2.date)
 			  AND s1.slept_at IS NOT NULL AND s2.woke_at IS NOT NULL
 		) WHERE sleep_secs > 0
+		  AND date NOT IN (SELECT DISTINCT date FROM sessions WHERE excluded = 1)
 		GROUP BY date
 	`)
 	if err != nil {
@@ -541,7 +545,7 @@ func getSessionSeries(db *sql.DB) (*SessionSeries, error) {
 			     THEN CAST((strftime('%s', LEAD(woke_at) OVER (ORDER BY id)) - strftime('%s', slept_at)) / 60 AS INTEGER)
 			     ELSE NULL END
 		FROM sessions
-		WHERE woke_at IS NOT NULL AND slept_at IS NOT NULL
+		WHERE woke_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0
 		  AND date >= date('now', '-30 days')
 		ORDER BY id ASC
 	`)

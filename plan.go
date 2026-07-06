@@ -75,6 +75,7 @@ type SessionView struct {
 	ActualCrate           *time.Time
 	SleepDuration   string
 	SettleDuration  string
+	Excluded        bool
 }
 
 // buildSchedule constructs the day's session list with planned times adjusted
@@ -148,7 +149,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 		var id int
 		var comment, sleepEase, trainingQuality string
 		var overtired, toiletPee, toiletPoop, toiletAccident bool
-		var physicalActivity, mentalActivity, calmWinddown, environmentalActivity bool
+		var physicalActivity, mentalActivity, calmWinddown, environmentalActivity, excluded bool
 		var ac *time.Time
 		if dbSess != nil {
 			id = dbSess.ID
@@ -163,6 +164,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			mentalActivity = dbSess.MentalActivity
 			calmWinddown = dbSess.CalmWinddown
 			environmentalActivity = dbSess.EnvironmentalActivity
+			excluded = dbSess.Excluded
 			ac = dbSess.CrateAt
 		}
 
@@ -200,6 +202,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 			CalmWinddown:          calmWinddown,
 			EnvironmentalActivity: environmentalActivity,
 			SettleDuration:        settleDuration,
+			Excluded:              excluded,
 		}
 	}
 

@@ -280,6 +280,12 @@ func parseTemplates() (*template.Template, error) {
 			return nil
 		},
 		"joinActivities": joinActivities,
+		"fmtDate": func(date string) string {
+			if t, err := time.Parse("2006-01-02", date); err == nil {
+				return t.Format("02/01/2006")
+			}
+			return date
+		},
 		"dayLabel": func(date string) string {
 			today := time.Now().Format("2006-01-02")
 			yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
@@ -290,7 +296,7 @@ func parseTemplates() (*template.Template, error) {
 				return "Yesterday"
 			default:
 				if t, err := time.Parse("2006-01-02", date); err == nil {
-					return t.Format("Mon Jan 2")
+					return t.Format("Mon 02/01")
 				}
 				return date
 			}
