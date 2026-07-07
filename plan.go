@@ -1,48 +1,9 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 )
-
-type SessionTemplate struct {
-	Label      string
-	Activities []string
-}
-
-// dailyPlan is the seed data for routine_sessions. Used only once on first run.
-var dailyPlan = []SessionTemplate{
-	{
-		Label:      "Morning",
-		Activities: []string{"Bathroom break outside", "Breakfast in playpen"},
-	},
-	{
-		Label:      "Mid-morning",
-		Activities: []string{"Environmental training in Oslo — carry or sit on bench (10–15 min)", "Calm walk home"},
-	},
-	{
-		Label:      "Lunch",
-		Activities: []string{"Lunch in playpen", "Calm cuddle"},
-	},
-	{
-		Label:      "Afternoon",
-		Activities: []string{"Mental training: sit / stay", "Solo time in playpen"},
-	},
-	{
-		Label:      "Dinner",
-		Activities: []string{"Dinner in playpen", "Calm wind-down"},
-	},
-	{
-		Label:      "Evening",
-		Activities: []string{"Evening snack in playpen", "Calm wind-down"},
-	},
-	{
-		Label:      "Night outing",
-		Activities: []string{"Last bathroom break — very calm, no play", "Cuddle on lap or floor only"},
-	},
-}
 
 // baseWakeTimes[0] anchors the first session when no actual wake time exists.
 var baseWakeTimes = []string{"09:00"}
@@ -216,28 +177,6 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 	}
 
 	return views
-}
-
-// seedDefaultRoutine inserts the hardcoded daily plan into routine_sessions on
-// first run. Does nothing if any sessions already exist.
-func seedDefaultRoutine(db *sql.DB) error {
-	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM routine_sessions`).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	for i, tmpl := range dailyPlan {
-		acts := strings.Join(tmpl.Activities, "\n")
-		if _, err := db.Exec(
-			`INSERT INTO routine_sessions (position, label, activities) VALUES (?, ?, ?)`,
-			i+1, tmpl.Label, acts,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func parseHHMM(s string) (int, int) {

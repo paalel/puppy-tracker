@@ -257,6 +257,47 @@ func closeStaleSession(db *sql.DB) error {
 	return err
 }
 
+func undoPhase(db *sql.DB) error {
+	var id int
+	var crateAt, sleptAt sql.NullString
+	err := db.QueryRow(`SELECT id, crate_at, slept_at FROM sessions ORDER BY id DESC LIMIT 1`).Scan(&id, &crateAt, &sleptAt)
+	if err != nil {
+		return err
+	}
+	if sleptAt.Valid {
+		_, err = db.Exec(`UPDATE sessions SET slept_at = NULL WHERE id = ?`, id)
+	} else if crateAt.Valid {
+		_, err = db.Exec(`UPDATE sessions SET crate_at = NULL WHERE id = ?`, id)
+	} else {
+		_, err = db.Exec(`DELETE FROM sessions WHERE id = ?`, id)
+	}
+	return err
+}
+
+func toggleToilet(db *sql.DB, id int, value string) error {
+	var query string
+	switch value {
+	case "pee":
+		query = `UPDATE sessions SET toilet_pee = 1 - toilet_pee WHERE id = ?`
+	case "poop":
+		query = `UPDATE sessions SET toilet_poop = 1 - toilet_poop WHERE id = ?`
+	case "accident":
+		query = `UPDATE sessions SET toilet_accident = 1 - toilet_accident WHERE id = ?`
+	case "nothing":
+		query = `UPDATE sessions SET toilet_pee = 0, toilet_poop = 0, toilet_accident = 0 WHERE id = ?`
+	default:
+		return fmt.Errorf("invalid toilet value: %s", value)
+	}
+	_, err := db.Exec(query, id)
+	return err
+}
+
+func getSessionDate(db *sql.DB, id int) (string, error) {
+	var date string
+	err := db.QueryRow(`SELECT date FROM sessions WHERE id = ?`, id).Scan(&date)
+	return date, err
+}
+
 func getSessionsForDate(db *sql.DB, date string) ([]DBSession, error) {
 	rows, err := db.Query(`
 		SELECT id, routine_session_id, woke_at, crate_at, slept_at,

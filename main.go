@@ -26,9 +26,6 @@ func main() {
 	if err := initDB(db); err != nil {
 		log.Fatalf("init db: %v", err)
 	}
-	if err := seedDefaultRoutine(db); err != nil {
-		log.Fatalf("seed routine: %v", err)
-	}
 	if err := ensureNtfyTopic(db); err != nil {
 		log.Fatalf("ensure ntfy topic: %v", err)
 	}

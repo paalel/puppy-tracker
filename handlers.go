@@ -76,52 +76,6 @@ type dailyHours struct {
 	Y float64 `json:"y"`
 }
 
-func sendNtfyNotification(topic, title, message string) error {
-	req, err := http.NewRequest("POST", "https://ntfy.sh/"+topic, strings.NewReader(message))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Title", title)
-	req.Header.Set("Content-Type", "text/plain")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("ntfy returned %d", resp.StatusCode)
-	}
-	return nil
-}
-
-func startNotificationWorker(db *sql.DB) {
-	go func() {
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			cfg, err := getConfig(db)
-			if err != nil || cfg.NtfyTopic == "" {
-				continue
-			}
-			ids, err := getSessionsNeedingNotification(db, cfg.WindDownMinutes)
-			if err != nil {
-				log.Printf("notification worker: %v", err)
-				continue
-			}
-			for _, id := range ids {
-				if err := markSessionNotified(db, id); err != nil {
-					log.Printf("ntfy mark notified: %v", err)
-					continue
-				}
-				title := "Time to wind down"
-				body := fmt.Sprintf("%s has been awake for %d minutes", cfg.PuppyName, cfg.WindDownMinutes)
-				if err := sendNtfyNotification(cfg.NtfyTopic, title, body); err != nil {
-					log.Printf("ntfy send: %v", err)
-				}
-			}
-		}
-	}()
-}
 
 func buildPageData(db *sql.DB, date string) (*PageData, error) {
 	now := time.Now()
@@ -461,21 +415,7 @@ func (a *App) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleUndoPhase(w http.ResponseWriter, r *http.Request) {
-	var id int
-	var crateAt, sleptAt sql.NullString
-	err := a.db.QueryRow(`SELECT id, crate_at, slept_at FROM sessions ORDER BY id DESC LIMIT 1`).Scan(&id, &crateAt, &sleptAt)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if sleptAt.Valid {
-		_, err = a.db.Exec(`UPDATE sessions SET slept_at = NULL WHERE id = ?`, id)
-	} else if crateAt.Valid {
-		_, err = a.db.Exec(`UPDATE sessions SET crate_at = NULL WHERE id = ?`, id)
-	} else {
-		_, err = a.db.Exec(`DELETE FROM sessions WHERE id = ?`, id)
-	}
-	if err != nil {
+	if err := undoPhase(a.db); err != nil {
 		log.Printf("handleUndoPhase: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -691,9 +631,8 @@ func (a *App) handleSetSessionTime(column string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		var sessionDate string
 		today := time.Now().Format("2006-01-02")
-		if err := a.db.QueryRow(`SELECT date FROM sessions WHERE id = ?`, id).Scan(&sessionDate); err == nil && sessionDate != today {
+		if sessionDate, err := getSessionDate(a.db, id); err == nil && sessionDate != today {
 			http.Redirect(w, r, "/?date="+sessionDate, http.StatusSeeOther)
 			return
 		}
@@ -812,21 +751,7 @@ func (a *App) handleToggleToilet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	var query string
-	switch r.FormValue("value") {
-	case "pee":
-		query = `UPDATE sessions SET toilet_pee = 1 - toilet_pee WHERE id = ?`
-	case "poop":
-		query = `UPDATE sessions SET toilet_poop = 1 - toilet_poop WHERE id = ?`
-	case "accident":
-		query = `UPDATE sessions SET toilet_accident = 1 - toilet_accident WHERE id = ?`
-	case "nothing":
-		query = `UPDATE sessions SET toilet_pee = 0, toilet_poop = 0, toilet_accident = 0 WHERE id = ?`
-	default:
-		http.Error(w, "invalid value", http.StatusBadRequest)
-		return
-	}
-	if _, err := a.db.Exec(query, id); err != nil {
+	if err := toggleToilet(a.db, id, r.FormValue("value")); err != nil {
 		log.Printf("handleToggleToilet: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
