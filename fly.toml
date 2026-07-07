@@ -1,9 +1,8 @@
-# fly.toml app configuration file generated for REDACTED_FLY_APP on 2026-06-22T10:22:52Z
+# fly.toml app configuration file.
+# App name is intentionally omitted — pass via --app flag or set FLY_APP env var.
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
 
-app = 'REDACTED_FLY_APP'
 primary_region = 'arn'
 
 [build]
