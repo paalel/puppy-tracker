@@ -1,54 +1,25 @@
-package main
+package sessions
 
 import (
 	"fmt"
 	"time"
+
+	"puppy/config"
+	"puppy/routine"
 )
 
-// baseWakeTimes[0] anchors the first session when no actual wake time exists.
 var baseWakeTimes = []string{"09:00"}
-
-type SessionView struct {
-	ID             int
-	Index          int
-	Label          string
-	Activities     []string
-	PlannedWake    time.Time
-	PlannedSleep   time.Time
-	ActualWake     *time.Time
-	ActualSleep    *time.Time
-	IsPast         bool
-	IsActive       bool
-	IsFuture       bool
-	ActualDuration  string
-	DurationClass   string
-	Comment         string
-	SleepEase       string
-	Overtired        bool
-	ToiletPee       bool
-	ToiletPoop      bool
-	ToiletAccident  bool
-	TrainingQuality  string
-	PhysicalActivity      bool
-	MentalActivity        bool
-	CalmWinddown          bool
-	EnvironmentalActivity bool
-	ActualCrate           *time.Time
-	SleepDuration   string
-	SettleDuration  string
-	Excluded        bool
-}
 
 // buildSchedule constructs the day's session list with planned times adjusted
 // by actual data. Each session's planned wake = previous session's actual_slept_at
 // + napMins, cascading forward through the day.
-func buildSchedule(date string, dbSessions []DBSession, routineSessions []RoutineSession, cfg *Config) []SessionView {
+func buildSchedule(date string, dbSessions []dbSession, routineSessions []routine.RoutineSession, cfg *config.Config) []SessionView {
 	loc := time.Local
 	today, _ := time.ParseInLocation("2006-01-02", date, loc)
 	awake := time.Duration(cfg.AwakeMinutes) * time.Minute
 	nap := time.Duration(cfg.NapMinutes) * time.Minute
 
-	dbByRoutineID := make(map[int]DBSession, len(dbSessions))
+	dbByRoutineID := make(map[int]dbSession, len(dbSessions))
 	for _, s := range dbSessions {
 		if s.RoutineSessionID != nil {
 			dbByRoutineID[*s.RoutineSessionID] = s
@@ -58,7 +29,7 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 	views := make([]SessionView, len(routineSessions))
 
 	for i, rs := range routineSessions {
-		var dbSess *DBSession
+		var dbSess *dbSession
 		if s, ok := dbByRoutineID[rs.ID]; ok {
 			dbSess = &s
 		}
@@ -137,29 +108,29 @@ func buildSchedule(date string, dbSessions []DBSession, routineSessions []Routin
 		}
 
 		views[i] = SessionView{
-			ID:               id,
-			Index:            i,
-			Label:            rs.Label,
-			Activities:       rs.Activities,
-			PlannedWake:      plannedWake,
-			PlannedSleep:     plannedWake.Add(awake),
-			ActualWake:       aw,
-			ActualCrate:      ac,
-			ActualSleep:      as,
-			IsPast:           as != nil,
-			IsActive:         aw != nil && as == nil,
-			IsFuture:         aw == nil,
-			ActualDuration:   actualDuration,
-			DurationClass:    durationClass,
-			Comment:          comment,
-			SleepEase:        sleepEase,
-			Overtired:        overtired,
-			ToiletPee:        toiletPee,
-			ToiletPoop:       toiletPoop,
-			ToiletAccident:   toiletAccident,
-			TrainingQuality:  trainingQuality,
-			PhysicalActivity: physicalActivity,
-			MentalActivity:   mentalActivity,
+			ID:                    id,
+			Index:                 i,
+			Label:                 rs.Label,
+			Activities:            rs.Activities,
+			PlannedWake:           plannedWake,
+			PlannedSleep:          plannedWake.Add(awake),
+			ActualWake:            aw,
+			ActualCrate:           ac,
+			ActualSleep:           as,
+			IsPast:                as != nil,
+			IsActive:              aw != nil && as == nil,
+			IsFuture:              aw == nil,
+			ActualDuration:        actualDuration,
+			DurationClass:         durationClass,
+			Comment:               comment,
+			SleepEase:             sleepEase,
+			Overtired:             overtired,
+			ToiletPee:             toiletPee,
+			ToiletPoop:            toiletPoop,
+			ToiletAccident:        toiletAccident,
+			TrainingQuality:       trainingQuality,
+			PhysicalActivity:      physicalActivity,
+			MentalActivity:        mentalActivity,
 			CalmWinddown:          calmWinddown,
 			EnvironmentalActivity: environmentalActivity,
 			SettleDuration:        settleDuration,

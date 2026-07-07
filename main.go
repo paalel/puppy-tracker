@@ -2,14 +2,183 @@ package main
 
 import (
 	"database/sql"
+	"embed"
+	"fmt"
+	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
-	_ "time/tzdata" // embed IANA timezone database so TZ env var works on Alpine
+	_ "time/tzdata"
+
+	"puppy/config"
+	"puppy/notify"
+	"puppy/routine"
+	"puppy/sessions"
+	"puppy/stats"
 )
+
+//go:embed migrations
+var migrationsFS embed.FS
+
+//go:embed templates
+var templateFS embed.FS
+
+//go:embed static
+var staticFS embed.FS
+
+func initDB(db *sql.DB) error {
+	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
+			continue
+		}
+		sql, err := fs.ReadFile(migrationsFS, "migrations/"+e.Name())
+		if err != nil {
+			return err
+		}
+		if err := runMigration(db, string(sql)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runMigration(db *sql.DB, sql string) error {
+	for _, stmt := range strings.Split(sql, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := db.Exec(stmt); err != nil {
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
+			snippet := stmt
+			if len(snippet) > 60 {
+				snippet = snippet[:60]
+			}
+			return fmt.Errorf("migration %q: %w", snippet, err)
+		}
+	}
+	return nil
+}
+
+func parseTemplates() (*template.Template, error) {
+	funcs := template.FuncMap{
+		"isPhase": func(p sessions.Phase, name string) bool {
+			return p == sessions.Phase(name)
+		},
+		"isPastDeadline": func(deadline string) bool {
+			now := time.Now()
+			t, err := time.Parse("15:04", deadline)
+			if err != nil {
+				return false
+			}
+			dl := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
+			return now.After(dl)
+		},
+		"fmtTime": func(t *time.Time) string {
+			if t == nil {
+				return ""
+			}
+			return t.Local().Format("15:04")
+		},
+		"sinceMin": func(t *time.Time) int {
+			if t == nil {
+				return 0
+			}
+			return int(time.Since(*t).Minutes())
+		},
+		"fmtMins": func(mins int) string {
+			if mins <= 0 {
+				return "–"
+			}
+			h, m := mins/60, mins%60
+			if m == 0 {
+				return fmt.Sprintf("%dh", h)
+			}
+			return fmt.Sprintf("%dh %dm", h, m)
+		},
+		"fmtPlan": func(t time.Time) string {
+			return t.Format("15:04")
+		},
+		"currentSession": func(svs []sessions.SessionView) *sessions.SessionView {
+			for i := range svs {
+				if svs[i].IsActive {
+					return &svs[i]
+				}
+			}
+			return nil
+		},
+		"nextSession": func(svs []sessions.SessionView) *sessions.SessionView {
+			for i := range svs {
+				if svs[i].IsFuture {
+					return &svs[i]
+				}
+			}
+			return nil
+		},
+		"joinActivities": routine.JoinActivities,
+		"fmtDate": func(date string) string {
+			if t, err := time.Parse("2006-01-02", date); err == nil {
+				return t.Format("02/01/2006")
+			}
+			return date
+		},
+		"dayLabel": func(date string) string {
+			today := time.Now().Format("2006-01-02")
+			yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+			switch date {
+			case today:
+				return "Today"
+			case yesterday:
+				return "Yesterday"
+			default:
+				if t, err := time.Parse("2006-01-02", date); err == nil {
+					return t.Format("Mon 02/01")
+				}
+				return date
+			}
+		},
+		"awakeClass": func(avgMins, targetMins int) string {
+			diff := avgMins - targetMins
+			if diff < 0 {
+				diff = -diff
+			}
+			switch {
+			case diff < 10:
+				return "text-emerald-600"
+			case diff < 20:
+				return "text-amber-500"
+			default:
+				return "text-rose-500"
+			}
+		},
+		"dict": func(pairs ...any) (map[string]any, error) {
+			if len(pairs)%2 != 0 {
+				return nil, fmt.Errorf("dict requires an even number of arguments")
+			}
+			m := make(map[string]any, len(pairs)/2)
+			for i := 0; i < len(pairs); i += 2 {
+				key, ok := pairs[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict keys must be strings")
+				}
+				m[key] = pairs[i+1]
+			}
+			return m, nil
+		},
+	}
+	return template.New("").Funcs(funcs).ParseFS(templateFS, "templates/*.html")
+}
 
 func main() {
 	dbPath := os.Getenv("DATABASE_PATH")
@@ -26,7 +195,7 @@ func main() {
 	if err := initDB(db); err != nil {
 		log.Fatalf("init db: %v", err)
 	}
-	if err := ensureNtfyTopic(db); err != nil {
+	if err := config.EnsureNtfyTopic(db); err != nil {
 		log.Fatalf("ensure ntfy topic: %v", err)
 	}
 
@@ -35,8 +204,7 @@ func main() {
 		log.Fatalf("parse templates: %v", err)
 	}
 
-	app := &App{db: db, tmpl: tmpl}
-	startNotificationWorker(db)
+	notify.Start(db)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -45,34 +213,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
-	mux.HandleFunc("GET /{$}", app.handleIndex)
-	mux.HandleFunc("GET /settings", app.handleGetSettings)
-	mux.HandleFunc("POST /settings", app.handlePostSettings)
-	mux.HandleFunc("GET /stats", app.handleGetStats)
-	mux.HandleFunc("POST /api/session/{id}/comment", app.handleSetSessionComment)
-	mux.HandleFunc("POST /api/session/{id}/sleep-ease", app.handleSetSessionEnum("sleep_ease", "easy", "ok", "hard"))
-	mux.HandleFunc("POST /api/session/{id}/overtired", app.handleToggleSessionBool("overtired"))
-	mux.HandleFunc("POST /api/session/{id}/wake-time", app.handleSetSessionTime("woke_at"))
-	mux.HandleFunc("POST /api/session/{id}/crate-time", app.handleSetSessionTime("crate_at"))
-	mux.HandleFunc("POST /api/session/{id}/sleep-time", app.handleSetSessionTime("slept_at"))
-	mux.HandleFunc("GET /api/state", app.handleGetState)
-	mux.HandleFunc("POST /api/phase", app.handlePostPhase)
-	mux.HandleFunc("POST /api/phase/undo", app.handleUndoPhase)
-	mux.HandleFunc("POST /api/wake-adjust", app.handleAdjustSessionTime("woke_at"))
-	mux.HandleFunc("POST /api/crate-adjust", app.handleAdjustSessionTime("crate_at"))
-	mux.HandleFunc("POST /api/sleep-adjust", app.handleAdjustSessionTime("slept_at"))
-	mux.HandleFunc("POST /api/routine/session", app.handleCreateRoutineSession)
-	mux.HandleFunc("POST /api/routine/session/{id}", app.handleUpdateRoutineSession)
-	mux.HandleFunc("POST /api/routine/session/{id}/delete", app.handleDeleteRoutineSession)
-	mux.HandleFunc("POST /api/routine/session/{id}/move/{dir}", app.handleMoveRoutineSession)
-	mux.HandleFunc("POST /api/session/{id}/toilet", app.handleToggleToilet)
-	mux.HandleFunc("POST /api/session/{id}/training-quality", app.handleSetSessionEnum("training_quality", "sharp", "ok", "distracted"))
-	mux.HandleFunc("POST /api/session/{id}/physical-activity", app.handleToggleSessionBool("physical_activity"))
-	mux.HandleFunc("POST /api/session/{id}/mental-activity", app.handleToggleSessionBool("mental_activity"))
-	mux.HandleFunc("POST /api/session/{id}/calm-winddown", app.handleToggleSessionBool("calm_winddown"))
-	mux.HandleFunc("POST /api/session/{id}/environmental-activity", app.handleToggleSessionBool("environmental_activity"))
-	mux.HandleFunc("POST /api/session/{id}/excluded", app.handleToggleSessionBool("excluded"))
-	mux.HandleFunc("POST /api/night-toilet", app.handleNightToilet)
+	sessions.New(db, tmpl).RegisterRoutes(mux)
+	routine.New(db, tmpl).RegisterRoutes(mux)
+	stats.New(db, tmpl).RegisterRoutes(mux)
+	config.New(db, tmpl).RegisterRoutes(mux)
 
 	log.Println("Puppy Routine Tracker listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))

@@ -1,4 +1,4 @@
-package main
+package notify
 
 import (
 	"database/sql"
@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"puppy/config"
+	"puppy/sessions"
 )
 
 func sendNtfyNotification(topic, title, message string) error {
@@ -27,22 +30,22 @@ func sendNtfyNotification(topic, title, message string) error {
 	return nil
 }
 
-func startNotificationWorker(db *sql.DB) {
+func Start(db *sql.DB) {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
-			cfg, err := getConfig(db)
+			cfg, err := config.Get(db)
 			if err != nil || cfg.NtfyTopic == "" {
 				continue
 			}
-			ids, err := getSessionsNeedingNotification(db, cfg.WindDownMinutes)
+			ids, err := sessions.GetSessionsNeedingNotification(db, cfg.WindDownMinutes)
 			if err != nil {
 				log.Printf("notification worker: %v", err)
 				continue
 			}
 			for _, id := range ids {
-				if err := markSessionNotified(db, id); err != nil {
+				if err := sessions.MarkSessionNotified(db, id); err != nil {
 					log.Printf("ntfy mark notified: %v", err)
 					continue
 				}
