@@ -1,12 +1,134 @@
 package sessions
 
 import (
+	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"puppy/config"
 	"puppy/routine"
+	"puppy/store"
 )
+
+// wakeDate returns today's date, rolling back to yesterday for wakes before WakeRolloverHour.
+func wakeDate() string {
+	now := time.Now().Local()
+	if now.Hour() < store.WakeRolloverHour {
+		return store.FormatDate(now.AddDate(0, 0, -1))
+	}
+	return store.Today()
+}
+
+type PageData struct {
+	Phase          Phase
+	Elapsed        string
+	Sessions       []SessionView
+	Config         *config.Config
+	LastWokeAt     *time.Time
+	LastSleptAt    *time.Time
+	ShouldWindDown bool
+	LastCrateAt    *time.Time
+	IsLocal        bool
+	DBPath         string
+	Date           string
+	IsToday        bool
+	IsNight        bool
+	PrevDate       string
+	NextDate       string
+	PoopStatus     *PoopStatus
+}
+
+func buildPageData(db *sql.DB, date string) (*PageData, error) {
+	now := time.Now()
+	today := store.Today()
+	isToday := date == today
+
+	d, _ := store.ParseDate(date)
+	prevDate := store.FormatDate(d.AddDate(0, 0, -1))
+	var nextDate string
+	if !isToday {
+		if next := store.FormatDate(d.AddDate(0, 0, 1)); next <= today {
+			nextDate = next
+		}
+	}
+
+	cfg, err := config.Get(db)
+	if err != nil {
+		return nil, fmt.Errorf("get config: %w", err)
+	}
+
+	dbSessions, err := getSessionsForDate(db, date)
+	if err != nil {
+		return nil, fmt.Errorf("get sessions: %w", err)
+	}
+
+	routineSessions, err := routine.GetAll(db)
+	if err != nil {
+		return nil, fmt.Errorf("get routine sessions: %w", err)
+	}
+
+	var phase Phase
+	var elapsed string
+	var shouldWindDown bool
+	var lastWokeAt, lastCrateAt, lastSleptAt *time.Time
+
+	if isToday {
+		state, err := getState(db)
+		if err != nil {
+			return nil, fmt.Errorf("get state: %w", err)
+		}
+		e := now.Sub(state.PhaseStartedAt.Local())
+		elapsed = formatDuration(e)
+		phase = state.Phase
+		shouldWindDown = phase == PhaseActive && e >= time.Duration(cfg.WindDownMinutes)*time.Minute
+
+		for i := len(dbSessions) - 1; i >= 0; i-- {
+			if lastWokeAt == nil && dbSessions[i].WokeAt != nil {
+				t := dbSessions[i].WokeAt.Local()
+				lastWokeAt = &t
+			}
+			if lastCrateAt == nil && dbSessions[i].CrateAt != nil {
+				t := dbSessions[i].CrateAt.Local()
+				lastCrateAt = &t
+			}
+			if lastSleptAt == nil && dbSessions[i].SleptAt != nil {
+				t := dbSessions[i].SleptAt.Local()
+				lastSleptAt = &t
+			}
+			if lastWokeAt != nil && lastCrateAt != nil && lastSleptAt != nil {
+				break
+			}
+		}
+	}
+
+	ps, err := getPoopStatus(db)
+	if err != nil {
+		return nil, fmt.Errorf("poop status: %w", err)
+	}
+
+	hr := now.Local().Hour()
+	isNight := hr >= 21 || hr < store.WakeRolloverHour
+
+	return &PageData{
+		Phase:          phase,
+		Elapsed:        elapsed,
+		Sessions:       buildSchedule(date, dbSessions, routineSessions, cfg),
+		Config:         cfg,
+		LastWokeAt:     lastWokeAt,
+		LastCrateAt:    lastCrateAt,
+		LastSleptAt:    lastSleptAt,
+		ShouldWindDown: shouldWindDown,
+		IsLocal:        os.Getenv("FLY_APP_NAME") == "",
+		DBPath:         os.Getenv("DATABASE_PATH"),
+		Date:           date,
+		IsToday:        isToday,
+		IsNight:        isNight,
+		PrevDate:       prevDate,
+		NextDate:       nextDate,
+		PoopStatus:     ps,
+	}, nil
+}
 
 var baseWakeTimes = []string{"09:00"}
 

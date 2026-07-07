@@ -20,6 +20,7 @@ import (
 	"puppy/routine"
 	"puppy/sessions"
 	"puppy/stats"
+	"puppy/store"
 )
 
 //go:embed migrations
@@ -128,21 +129,21 @@ func parseTemplates() (*template.Template, error) {
 		},
 		"joinActivities": routine.JoinActivities,
 		"fmtDate": func(date string) string {
-			if t, err := time.Parse("2006-01-02", date); err == nil {
+			if t, err := store.ParseDate(date); err == nil {
 				return t.Format("02/01/2006")
 			}
 			return date
 		},
 		"dayLabel": func(date string) string {
-			today := time.Now().Format("2006-01-02")
-			yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+			today := store.Today()
+			yesterday := store.FormatDate(time.Now().AddDate(0, 0, -1))
 			switch date {
 			case today:
 				return "Today"
 			case yesterday:
 				return "Yesterday"
 			default:
-				if t, err := time.Parse("2006-01-02", date); err == nil {
+				if t, err := store.ParseDate(date); err == nil {
 					return t.Format("Mon 02/01")
 				}
 				return date

@@ -89,7 +89,7 @@ func adjustLatestSessionTime(db *sql.DB, column string, deltaMinutes int) error 
 	if err != nil {
 		return err
 	}
-	ts := t.Add(time.Duration(deltaMinutes) * time.Minute).UTC().Format("2006-01-02 15:04:05")
+	ts := store.FormatTimestamp(t.Add(time.Duration(deltaMinutes) * time.Minute))
 	u := fmt.Sprintf(`UPDATE sessions SET %s = ? WHERE id = (SELECT id FROM sessions WHERE %s IS NOT NULL ORDER BY id DESC LIMIT 1)`, column, column)
 	_, err = db.Exec(u, ts)
 	return err
@@ -109,7 +109,7 @@ func closeStaleSession(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	today := time.Now().Format("2006-01-02")
+	today := store.Today()
 	if dateStr >= today {
 		return nil
 	}
@@ -266,7 +266,7 @@ func setSessionTime(db *sql.DB, id int, column string, newTime time.Time) error 
 		newTime.Hour(), newTime.Minute(), 0, 0, time.Local)
 	_, err = db.Exec(
 		fmt.Sprintf(`UPDATE sessions SET %s = ? WHERE id = ?`, column),
-		combined.UTC().Format("2006-01-02 15:04:05"), id,
+		store.FormatTimestamp(combined), id,
 	)
 	return err
 }
@@ -325,7 +325,7 @@ func logNightToilet(db *sql.DB, toilet string) error {
 	}
 	_, err := db.Exec(
 		`INSERT INTO night_toilets (occurred_at, toilet, toilet_pee, toilet_poop, toilet_accident) VALUES (?, ?, ?, ?, ?)`,
-		time.Now().UTC().Format("2006-01-02 15:04:05"), toilet, pee, poop, accident,
+		nowUTC(), toilet, pee, poop, accident,
 	)
 	return err
 }
