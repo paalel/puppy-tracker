@@ -66,6 +66,8 @@ type SessionView struct {
 	SettleDuration        string
 	Excluded              bool
 	PoopLikelihood        float64
+	PoopLo                float64
+	PoopHi                float64
 }
 
 type PoopStatus struct {

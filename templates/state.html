@@ -9,7 +9,7 @@
     </div>
     {{if .PoopLikelihood}}
     <div class="text-right">
-        <p class="text-xs text-stone-400 mb-0.5">poop chance · {{poopPct .PoopLikelihood}}</p>
+        <p class="text-xs text-stone-400 mb-0.5">poop chance · {{poopPct .PoopLikelihood}} {{poopCI .PoopLo .PoopHi}}</p>
         <p class="text-sm font-semibold text-amber-500">{{poopAlert .PoopLikelihood}}</p>
     </div>
     {{end}}

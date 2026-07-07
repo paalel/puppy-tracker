@@ -38,6 +38,8 @@ type PageData struct {
 	NextDate       string
 	PoopStatus     *PoopStatus
 	PoopLikelihood float64
+	PoopLo         float64
+	PoopHi         float64
 }
 
 func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, error) {
@@ -114,27 +116,38 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 	views := buildSchedule(date, dbSessions, routineSessions, cfg)
 
 	if pred != nil && isToday {
-		sinceLastPoop, _ := getSessionsSinceLastPoop(db)
-		futureOffset := 0
-		for i := range views {
-			switch {
-			case views[i].IsActive && sinceLastPoop > 0:
-				views[i].PoopLikelihood = pred.Score(views[i].Position, sinceLastPoop)
-			case views[i].IsFuture:
-				futureOffset++
-				n := sinceLastPoop + futureOffset
-				if n < 1 {
-					n = 1
+		hoursSincePoop, _ := getHoursSinceLastPoop(db)
+		if hoursSincePoop >= 0 {
+			cycleHours := float64(cfg.AwakeMinutes+cfg.NapMinutes) / 60.0
+			futureOffset := 0
+			for i := range views {
+				var utcHour int
+				if views[i].ActualWake != nil {
+					utcHour = views[i].ActualWake.UTC().Hour()
+				} else {
+					utcHour = views[i].PlannedWake.UTC().Hour()
 				}
-				views[i].PoopLikelihood = pred.Score(views[i].Position, n)
+				var mid, lo, hi float64
+				switch {
+				case views[i].IsActive:
+					mid, lo, hi = pred.Predict(utcHour, hoursSincePoop)
+				case views[i].IsFuture:
+					futureOffset++
+					mid, lo, hi = pred.Predict(utcHour, hoursSincePoop+float64(futureOffset)*cycleHours)
+				}
+				views[i].PoopLikelihood = mid
+				views[i].PoopLo = lo
+				views[i].PoopHi = hi
 			}
 		}
 	}
 
-	var poopLikelihood float64
+	var poopLikelihood, poopLo, poopHi float64
 	for _, v := range views {
 		if (v.IsActive || v.IsFuture) && v.PoopLikelihood > 0 {
 			poopLikelihood = v.PoopLikelihood
+			poopLo = v.PoopLo
+			poopHi = v.PoopHi
 			break
 		}
 	}
@@ -157,6 +170,8 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		NextDate:       nextDate,
 		PoopStatus:     ps,
 		PoopLikelihood: poopLikelihood,
+		PoopLo:         poopLo,
+		PoopHi:         poopHi,
 	}, nil
 }
 

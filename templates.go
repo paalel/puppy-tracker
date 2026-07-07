@@ -117,6 +117,12 @@ func parseTemplates() (*template.Template, error) {
 		"poopPct": func(p float64) string {
 			return fmt.Sprintf("%d%%", int(p*100))
 		},
+		"poopCI": func(lo, hi float64) string {
+			if lo == 0 && hi == 0 {
+				return ""
+			}
+			return fmt.Sprintf("(%d–%d%%)", int(lo*100), int(hi*100))
+		},
 		"poopAlert": func(p float64) string {
 			switch {
 			case p >= 0.5:

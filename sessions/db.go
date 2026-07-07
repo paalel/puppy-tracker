@@ -320,110 +320,69 @@ func logNightToilet(db *sql.DB, toilet string) error {
 	return err
 }
 
-// loadSessionRates returns [k poops, n sessions] per routine session position.
-func loadSessionRates(db *sql.DB) (map[int][2]int, error) {
-	rows, err := db.Query(`
-		SELECT rs.position, COUNT(*) AS n, SUM(s.toilet_poop) AS k
-		FROM sessions s
-		JOIN routine_sessions rs ON rs.id = s.routine_session_id
-		WHERE s.woke_at IS NOT NULL AND COALESCE(s.excluded, 0) = 0
-		GROUP BY rs.position
-		ORDER BY rs.position
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	rates := make(map[int][2]int)
-	for rows.Next() {
-		var pos, n, k int
-		if err := rows.Scan(&pos, &n, &k); err != nil {
-			return nil, err
-		}
-		rates[pos] = [2]int{k, n}
-	}
-	return rates, rows.Err()
+type trainRow struct {
+	utcHour        int
+	hoursSincePoop float64
+	poop           bool
 }
 
-// loadUrgencyRates returns [k, n] per sessions-since-last-poop bucket
-// (index 0 = 1 session since poop, index 1 = 2 sessions, etc.).
-func loadUrgencyRates(db *sql.DB) ([][2]int, error) {
+// loadTrainingData returns one row per non-excluded session that has a prior poop,
+// with the UTC hour of woke_at and elapsed hours since the most recent prior poop.
+func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 	rows, err := db.Query(`
-		WITH session_order AS (
-			SELECT
-				s.toilet_poop,
-				ROW_NUMBER() OVER (ORDER BY s.date, rs.position) AS rn
-			FROM sessions s
-			JOIN routine_sessions rs ON rs.id = s.routine_session_id
-			WHERE s.woke_at IS NOT NULL AND COALESCE(s.excluded, 0) = 0
-		)
 		SELECT
-			sessions_since_poop,
-			COUNT(*) AS n,
-			SUM(toilet_poop) AS k
-		FROM (
-			SELECT
-				s.toilet_poop,
-				s.rn - (
-					SELECT MAX(p.rn) FROM session_order p
-					WHERE p.rn < s.rn AND p.toilet_poop = 1
-				) AS sessions_since_poop
-			FROM session_order s
-			WHERE EXISTS (
-				SELECT 1 FROM session_order p WHERE p.rn < s.rn AND p.toilet_poop = 1
-			)
-		)
-		GROUP BY sessions_since_poop
-		ORDER BY sessions_since_poop
+			CAST(strftime('%H', s.woke_at) AS INTEGER) AS utc_hour,
+			(CAST(strftime('%s', s.woke_at) AS REAL) -
+			 CAST(strftime('%s', (
+			     SELECT MAX(p.woke_at) FROM sessions p
+			     WHERE p.toilet_poop = 1 AND p.woke_at < s.woke_at
+			       AND COALESCE(p.excluded, 0) = 0
+			 )) AS REAL)) / 3600.0 AS hours_since_poop,
+			s.toilet_poop
+		FROM sessions s
+		WHERE s.woke_at IS NOT NULL AND COALESCE(s.excluded, 0) = 0
+		  AND EXISTS (
+		      SELECT 1 FROM sessions p
+		      WHERE p.toilet_poop = 1 AND p.woke_at < s.woke_at
+		        AND COALESCE(p.excluded, 0) = 0
+		  )
+		ORDER BY s.woke_at
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	type bucket struct{ k, n int }
-	buckets := make(map[int]bucket)
-	maxIdx := 0
+	var data []trainRow
 	for rows.Next() {
-		var ssp, n, k int
-		if err := rows.Scan(&ssp, &n, &k); err != nil {
+		var utcHour, poop int
+		var hoursSincePoop float64
+		if err := rows.Scan(&utcHour, &hoursSincePoop, &poop); err != nil {
 			return nil, err
 		}
-		if ssp > 0 {
-			buckets[ssp] = bucket{k, n}
-			if ssp > maxIdx {
-				maxIdx = ssp
-			}
+		if hoursSincePoop > 0 {
+			data = append(data, trainRow{utcHour, hoursSincePoop, poop == 1})
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if maxIdx > 8 {
-		maxIdx = 8
-	}
-
-	rates := make([][2]int, maxIdx)
-	for i := 1; i <= maxIdx; i++ {
-		b := buckets[i]
-		rates[i-1] = [2]int{b.k, b.n}
-	}
-	return rates, nil
+	return data, rows.Err()
 }
 
-// getSessionsSinceLastPoop returns the count of completed sessions since the most recent poop.
-func getSessionsSinceLastPoop(db *sql.DB) (int, error) {
-	var count int
+// getHoursSinceLastPoop returns hours elapsed since the last poop session's woke_at.
+// Returns -1 if no poop has ever been recorded.
+func getHoursSinceLastPoop(db *sql.DB) (float64, error) {
+	var hours sql.NullFloat64
 	err := db.QueryRow(`
-		SELECT COUNT(*)
-		FROM sessions s
-		WHERE s.woke_at IS NOT NULL AND COALESCE(s.excluded, 0) = 0
-		  AND s.id > COALESCE(
-		      (SELECT MAX(id) FROM sessions WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0),
-		      0
-		  )
-	`).Scan(&count)
-	return count, err
+		SELECT (CAST(strftime('%s', 'now') AS REAL) -
+		        CAST(strftime('%s', MAX(woke_at)) AS REAL)) / 3600.0
+		FROM sessions
+		WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0
+	`).Scan(&hours)
+	if err != nil {
+		return -1, err
+	}
+	if !hours.Valid || hours.Float64 < 0 {
+		return -1, nil
+	}
+	return hours.Float64, nil
 }
 
 func GetSessionsNeedingNotification(db *sql.DB, afterMinutes int) ([]int, error) {
