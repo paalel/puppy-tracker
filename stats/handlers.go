@@ -44,11 +44,6 @@ type StatsData struct {
 	NapByTimeJSON    template.JS
 }
 
-type dailyHours struct {
-	X string  `json:"x"`
-	Y float64 `json:"y"`
-}
-
 func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	cfg, err := config.Get(h.db)
 	if err != nil {
@@ -88,39 +83,8 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		sd.SettleHardJSON = mustJSON(series.SettleHard)
 		sd.SettleNoneJSON = mustJSON(series.SettleNone)
 
-		type napBucket struct {
-			Avg   float64 `json:"avg"`
-			Count int     `json:"count"`
-		}
-		bucketSum := make([]int, 12)
-		bucketCount := make([]int, 12)
-		for _, p := range series.NapByTime {
-			b := int(p.X / 2)
-			if b > 11 {
-				b = 11
-			}
-			bucketSum[b] += p.Y
-			bucketCount[b]++
-		}
-		napBuckets := make([]napBucket, 12)
-		for i := range napBuckets {
-			napBuckets[i].Count = bucketCount[i]
-			if bucketCount[i] > 0 {
-				napBuckets[i].Avg = float64(bucketSum[i]) / float64(bucketCount[i])
-			}
-		}
-		sd.NapByTimeJSON = mustJSON(napBuckets)
-
-		var totalSleep []dailyHours
-		for i := len(days) - 1; i >= 0; i-- {
-			if days[i].TotalSleepMins > 0 {
-				totalSleep = append(totalSleep, dailyHours{
-					X: days[i].Date,
-					Y: float64(days[i].TotalSleepMins) / 60.0,
-				})
-			}
-		}
-		sd.TotalSleepJSON = mustJSON(totalSleep)
+		sd.NapByTimeJSON = mustJSON(computeNapBuckets(series))
+		sd.TotalSleepJSON = mustJSON(totalSleepPoints(days))
 
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)
