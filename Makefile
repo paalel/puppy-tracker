@@ -2,7 +2,13 @@ APP = REDACTED_FLY_APP
 DB_REMOTE = /data/puppy.db
 DB_LOCAL = ./puppy.db
 
-.PHONY: db-pull db-backup db-restore
+.PHONY: deploy db-pull db-backup db-restore
+
+deploy:
+	@echo "Running tests..."
+	@go test ./... || (echo "Tests failed, aborting deploy."; exit 1)
+	@echo "Deploying to Fly.io..."
+	fly deploy --app $(APP)
 
 db-pull:
 	@echo "Downloading prod database..."
