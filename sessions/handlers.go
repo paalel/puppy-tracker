@@ -14,12 +14,13 @@ import (
 )
 
 type Handler struct {
-	db   *sql.DB
-	tmpl *template.Template
+	db        *sql.DB
+	tmpl      *template.Template
+	predictor *PoopPredictor
 }
 
 func New(db *sql.DB, tmpl *template.Template) *Handler {
-	return &Handler{db: db, tmpl: tmpl}
+	return &Handler{db: db, tmpl: tmpl, predictor: newPoopPredictor(db)}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -55,7 +56,7 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if date == "" || date > today {
 		date = today
 	}
-	data, err := buildPageData(h.db, date)
+	data, err := buildPageData(h.db, date, h.predictor)
 	if err != nil {
 		log.Printf("handleIndex buildPageData: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -98,6 +99,9 @@ func (h *Handler) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		if err := h.predictor.Refresh(h.db); err != nil {
+			log.Printf("predictor refresh: %v", err)
+		}
 	case PhaseCrating:
 		if err := logCrate(h.db); err != nil {
 			log.Printf("logCrate: %v", err)
@@ -109,6 +113,9 @@ func (h *Handler) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 			log.Printf("logSleep: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if err := h.predictor.Refresh(h.db); err != nil {
+			log.Printf("predictor refresh: %v", err)
 		}
 	}
 
@@ -253,6 +260,9 @@ func (h *Handler) handleToggleToilet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := h.predictor.Refresh(h.db); err != nil {
+		log.Printf("predictor refresh: %v", err)
+	}
 	h.renderStateFragment(w)
 }
 
@@ -288,7 +298,7 @@ func (h *Handler) renderFragment(w http.ResponseWriter, name string, data any) {
 }
 
 func (h *Handler) renderStateFragment(w http.ResponseWriter) {
-	data, err := buildPageData(h.db, store.Today())
+	data, err := buildPageData(h.db, store.Today(), h.predictor)
 	if err != nil {
 		log.Printf("buildPageData: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

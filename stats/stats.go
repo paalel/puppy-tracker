@@ -43,5 +43,4 @@ type ToiletAnalytics struct {
 	TotalPoops int
 	TotalWakes int
 	KDE        []float64
-	BetaMean   []float64
 }

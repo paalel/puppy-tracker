@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	minKDESamples  = 5
-	minBetaSamples = 14
-	kdeBandwidth   = 1.5
+	minKDESamples = 5
+	kdeBandwidth  = 1.5
 )
 
 // lastAccidentBefore is the hardcoded baseline until a new accident is logged in the DB.
@@ -327,15 +326,6 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 			for i := range ta.KDE {
 				ta.KDE[i] *= scale
 			}
-		}
-	}
-
-	if totalWakes >= minBetaSamples {
-		ta.BetaMean = make([]float64, 24)
-		for h := 0; h < 24; h++ {
-			alpha := float64(poopCounts[h]) + 1.0
-			beta := float64(opportunities[h]-poopCounts[h]) + 1.0
-			ta.BetaMean[h] = alpha / (alpha + beta)
 		}
 	}
 

@@ -2,17 +2,15 @@
 
 {{if and .IsToday .PoopStatus .PoopStatus.LastPoop}}
 {{$minsAgo := sinceMin .PoopStatus.LastPoop}}
-{{$avg := .PoopStatus.AvgIntervalMins}}
 <div class="card px-5 py-3 mb-4 flex items-center justify-between">
     <div>
         <p class="text-xs text-stone-400 mb-0.5">Last poop</p>
         <p class="text-sm font-semibold text-stone-700">{{fmtTime .PoopStatus.LastPoop}} · {{fmtMins $minsAgo}} ago</p>
     </div>
-    {{if gt $avg 0}}
+    {{if .PoopLikelihood}}
     <div class="text-right">
-        <p class="text-xs text-stone-400 mb-0.5">avg every</p>
-        <p class="text-sm font-semibold
-            {{if gt $minsAgo $avg}}text-amber-500{{else}}text-emerald-500{{end}}">{{fmtMins $avg}}</p>
+        <p class="text-xs text-stone-400 mb-0.5">poop chance · {{poopPct .PoopLikelihood}}</p>
+        <p class="text-sm font-semibold text-amber-500">{{poopAlert .PoopLikelihood}}</p>
     </div>
     {{end}}
 </div>

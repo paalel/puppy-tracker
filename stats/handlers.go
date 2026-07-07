@@ -37,7 +37,6 @@ type StatsData struct {
 	AccidentFreeDays int
 	BucketJSON       template.JS
 	KDEJSON          template.JS
-	BetaJSON         template.JS
 	TotalPoops       int
 	TotalWakes       int
 	TotalSleepJSON   template.JS
@@ -97,9 +96,6 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		sd.TotalWakes = ta.TotalWakes
 		if ta.KDE != nil {
 			sd.KDEJSON = mustJSON(ta.KDE)
-		}
-		if ta.BetaMean != nil {
-			sd.BetaJSON = mustJSON(ta.BetaMean)
 		}
 	}
 

@@ -37,9 +37,10 @@ type PageData struct {
 	PrevDate       string
 	NextDate       string
 	PoopStatus     *PoopStatus
+	PoopLikelihood float64
 }
 
-func buildPageData(db *sql.DB, date string) (*PageData, error) {
+func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, error) {
 	now := time.Now()
 	today := store.Today()
 	isToday := date == today
@@ -110,10 +111,38 @@ func buildPageData(db *sql.DB, date string) (*PageData, error) {
 	hr := now.Local().Hour()
 	isNight := hr >= 21 || hr < store.WakeRolloverHour
 
+	views := buildSchedule(date, dbSessions, routineSessions, cfg)
+
+	if pred != nil && isToday {
+		sinceLastPoop, _ := getSessionsSinceLastPoop(db)
+		futureOffset := 0
+		for i := range views {
+			switch {
+			case views[i].IsActive && sinceLastPoop > 0:
+				views[i].PoopLikelihood = pred.Score(views[i].Position, sinceLastPoop)
+			case views[i].IsFuture:
+				futureOffset++
+				n := sinceLastPoop + futureOffset
+				if n < 1 {
+					n = 1
+				}
+				views[i].PoopLikelihood = pred.Score(views[i].Position, n)
+			}
+		}
+	}
+
+	var poopLikelihood float64
+	for _, v := range views {
+		if (v.IsActive || v.IsFuture) && v.PoopLikelihood > 0 {
+			poopLikelihood = v.PoopLikelihood
+			break
+		}
+	}
+
 	return &PageData{
 		Phase:          phase,
 		Elapsed:        elapsed,
-		Sessions:       buildSchedule(date, dbSessions, routineSessions, cfg),
+		Sessions:       views,
 		Config:         cfg,
 		LastWokeAt:     lastWokeAt,
 		LastCrateAt:    lastCrateAt,
@@ -127,6 +156,7 @@ func buildPageData(db *sql.DB, date string) (*PageData, error) {
 		PrevDate:       prevDate,
 		NextDate:       nextDate,
 		PoopStatus:     ps,
+		PoopLikelihood: poopLikelihood,
 	}, nil
 }
 
@@ -232,6 +262,7 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 		views[i] = SessionView{
 			ID:                    id,
 			Index:                 i,
+			Position:              rs.Position,
 			Label:                 rs.Label,
 			Activities:            rs.Activities,
 			PlannedWake:           plannedWake,

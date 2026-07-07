@@ -38,6 +38,7 @@ type dbSession struct {
 type SessionView struct {
 	ID                    int
 	Index                 int
+	Position              int
 	Label                 string
 	Activities            []string
 	PlannedWake           time.Time
@@ -64,10 +65,9 @@ type SessionView struct {
 	SleepDuration         string
 	SettleDuration        string
 	Excluded              bool
+	PoopLikelihood        float64
 }
 
 type PoopStatus struct {
-	LastPoop        *time.Time
-	AvgIntervalMins int
-	SampleSize      int
+	LastPoop *time.Time
 }
