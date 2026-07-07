@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 func Get(db *sql.DB) (*Config, error) {
@@ -37,6 +38,10 @@ func Get(db *sql.DB) (*Config, error) {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				c.WindDownMinutes = n
 			}
+		case "puppy_birthdate":
+			if t, err := time.Parse("2006-01-02", v); err == nil {
+				c.Birthdate = &t
+			}
 		case "ntfy_topic":
 			c.NtfyTopic = v
 		}
@@ -45,8 +50,13 @@ func Get(db *sql.DB) (*Config, error) {
 }
 
 func Save(db *sql.DB, c *Config) error {
+	var birthdateStr string
+	if c.Birthdate != nil {
+		birthdateStr = c.Birthdate.Format("2006-01-02")
+	}
 	pairs := [][2]string{
 		{"puppy_name", c.PuppyName},
+		{"puppy_birthdate", birthdateStr},
 		{"awake_minutes", strconv.Itoa(c.AwakeMinutes)},
 		{"nap_minutes", strconv.Itoa(c.NapMinutes)},
 		{"wind_down_minutes", strconv.Itoa(c.WindDownMinutes)},

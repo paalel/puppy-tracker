@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"html/template"
+	"math"
 	"time"
 
 	"puppy/routine"
@@ -100,6 +101,18 @@ func parseTemplates() (*template.Template, error) {
 			default:
 				return "text-rose-500"
 			}
+		},
+		"ageWeeks": func(t *time.Time) int {
+			if t == nil {
+				return 0
+			}
+			return int(math.Floor(time.Since(*t).Hours() / (24 * 7)))
+		},
+		"birthdateStr": func(t *time.Time) string {
+			if t == nil {
+				return ""
+			}
+			return t.Format("2006-01-02")
 		},
 		"poopPct": func(p float64) string {
 			return fmt.Sprintf("%d%%", int(p*100))

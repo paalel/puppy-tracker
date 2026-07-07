@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"puppy/routine"
 )
@@ -80,7 +81,16 @@ func (h *Handler) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 		windDownMins = current.WindDownMinutes
 	}
 
-	cfg := &Config{PuppyName: name, AwakeMinutes: awakeMins, NapMinutes: napMins, WindDownMinutes: windDownMins}
+	var birthdate *time.Time
+	if raw := r.FormValue("puppy_birthdate"); raw != "" {
+		if t, err := time.Parse("2006-01-02", raw); err == nil {
+			birthdate = &t
+		}
+	} else {
+		birthdate = current.Birthdate
+	}
+
+	cfg := &Config{PuppyName: name, Birthdate: birthdate, AwakeMinutes: awakeMins, NapMinutes: napMins, WindDownMinutes: windDownMins}
 	if err := Save(h.db, cfg); err != nil {
 		log.Printf("saveConfig: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
