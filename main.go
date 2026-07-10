@@ -14,7 +14,6 @@ import (
 	_ "time/tzdata"
 
 	"puppy/config"
-	"puppy/notify"
 	"puppy/routine"
 	"puppy/sessions"
 	"puppy/stats"
@@ -84,16 +83,10 @@ func main() {
 	if err := initDB(db); err != nil {
 		log.Fatalf("init db: %v", err)
 	}
-	if err := config.EnsureNtfyTopic(db); err != nil {
-		log.Fatalf("ensure ntfy topic: %v", err)
-	}
-
 	tmpl, err := parseTemplates()
 	if err != nil {
 		log.Fatalf("parse templates: %v", err)
 	}
-
-	notify.Start(db)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {

@@ -438,30 +438,3 @@ func getHoursSinceLastPoop(db *sql.DB) (float64, error) {
 	return hours.Float64, nil
 }
 
-func GetSessionsNeedingNotification(db *sql.DB, afterMinutes int) ([]int, error) {
-	rows, err := db.Query(`
-		SELECT id FROM sessions
-		WHERE woke_at IS NOT NULL
-		  AND slept_at IS NULL
-		  AND awake_notified = 0
-		  AND woke_at <= datetime('now', '-' || ? || ' minutes')
-	`, afterMinutes)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []int
-	for rows.Next() {
-		var id int
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
-func MarkSessionNotified(db *sql.DB, id int) error {
-	_, err := db.Exec(`UPDATE sessions SET awake_notified = 1 WHERE id = ?`, id)
-	return err
-}

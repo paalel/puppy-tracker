@@ -1,9 +1,7 @@
 package config
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"fmt"
 	"strconv"
 	"time"
 )
@@ -42,8 +40,6 @@ func Get(db *sql.DB) (*Config, error) {
 			if t, err := time.Parse("2006-01-02", v); err == nil {
 				c.Birthdate = &t
 			}
-		case "ntfy_topic":
-			c.NtfyTopic = v
 		}
 	}
 	return c, rows.Err()
@@ -74,22 +70,3 @@ func Save(db *sql.DB, c *Config) error {
 	return nil
 }
 
-func EnsureNtfyTopic(db *sql.DB) error {
-	cfg, err := Get(db)
-	if err != nil {
-		return err
-	}
-	if cfg.NtfyTopic != "" {
-		return nil
-	}
-	b := make([]byte, 5)
-	if _, err := rand.Read(b); err != nil {
-		return err
-	}
-	topic := fmt.Sprintf("puppy-%x", b)
-	_, err = db.Exec(
-		`INSERT INTO config (key, value) VALUES ('ntfy_topic', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-		topic,
-	)
-	return err
-}

@@ -8,5 +8,4 @@ type Config struct {
 	AwakeMinutes    int
 	NapMinutes      int
 	WindDownMinutes int
-	NtfyTopic       string
 }
