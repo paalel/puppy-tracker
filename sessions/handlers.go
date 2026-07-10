@@ -51,7 +51,7 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if err := closeStaleSession(h.db); err != nil {
 		log.Printf("closeStaleSession: %v", err)
 	}
-	today := store.Today()
+	today := store.RolloverDate()
 	date := r.URL.Query().Get("date")
 	if date == "" || date > today {
 		date = today
@@ -233,12 +233,13 @@ func (h *Handler) handleSetSessionTime(column string) http.HandlerFunc {
 		}
 		if err := setSessionTime(h.db, id, column, t); err != nil {
 			log.Printf("setSessionTime %s: %v", column, err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		today := store.Today()
+		today := store.RolloverDate()
 		if sessionDate, err := getSessionDate(h.db, id); err == nil && sessionDate != today {
-			http.Redirect(w, r, "/?date="+sessionDate, http.StatusSeeOther)
+			w.Header().Set("HX-Redirect", "/?date="+sessionDate)
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		h.renderStateFragment(w)
@@ -298,7 +299,7 @@ func (h *Handler) renderFragment(w http.ResponseWriter, name string, data any) {
 }
 
 func (h *Handler) renderStateFragment(w http.ResponseWriter) {
-	data, err := buildPageData(h.db, store.Today(), h.predictor)
+	data, err := buildPageData(h.db, store.RolloverDate(), h.predictor)
 	if err != nil {
 		log.Printf("buildPageData: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

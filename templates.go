@@ -74,8 +74,11 @@ func parseTemplates() (*template.Template, error) {
 			return date
 		},
 		"dayLabel": func(date string) string {
-			today := store.Today()
-			yesterday := store.FormatDate(time.Now().AddDate(0, 0, -1))
+			today := store.RolloverDate()
+			yesterday := store.FormatDate(time.Now().Local().AddDate(0, 0, -1))
+			if time.Now().Local().Hour() < store.WakeRolloverHour {
+				yesterday = store.FormatDate(time.Now().Local().AddDate(0, 0, -2))
+			}
 			switch date {
 			case today:
 				return "Today"

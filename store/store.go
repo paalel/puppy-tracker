@@ -27,9 +27,20 @@ func NowUTC() string {
 	return time.Now().UTC().Format(TimestampFormat)
 }
 
-// Today returns the current local date as a SQLite date string.
+// Today returns the current local calendar date as a SQLite date string.
 func Today() string {
 	return time.Now().Format(DateFormat)
+}
+
+// RolloverDate returns the "session date" for the current moment, rolling back
+// to yesterday for any time before WakeRolloverHour (e.g. 01:30 belongs to
+// the previous day's session, not the new calendar day).
+func RolloverDate() string {
+	now := time.Now().Local()
+	if now.Hour() < WakeRolloverHour {
+		return FormatDate(now.AddDate(0, 0, -1))
+	}
+	return Today()
 }
 
 // FormatDate formats a time as a SQLite date string.

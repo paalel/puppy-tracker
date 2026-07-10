@@ -109,7 +109,7 @@ func closeStaleSession(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	today := store.Today()
+	today := store.RolloverDate()
 	if dateStr >= today {
 		return nil
 	}
@@ -250,20 +250,73 @@ func toggleSessionBool(db *sql.DB, id int, column string) error {
 
 // setSessionTime updates a time column, preserving the existing date and
 // replacing only the hour/minute with newTime (interpreted in local time).
+// Returns an error if the result would violate wake ≤ crate ≤ sleep ordering.
 func setSessionTime(db *sql.DB, id int, column string, newTime time.Time) error {
-	var raw string
+	var rawWoke, rawCrate, rawSlept sql.NullString
 	if err := db.QueryRow(
-		fmt.Sprintf(`SELECT COALESCE(%s, '') FROM sessions WHERE id = ?`, column), id,
-	).Scan(&raw); err != nil {
+		`SELECT woke_at, crate_at, slept_at FROM sessions WHERE id = ?`, id,
+	).Scan(&rawWoke, &rawCrate, &rawSlept); err != nil {
 		return err
 	}
-	existing, err := parseTimestamp(raw)
+
+	raw := map[string]sql.NullString{
+		"woke_at": rawWoke, "crate_at": rawCrate, "slept_at": rawSlept,
+	}[column]
+	if !raw.Valid || raw.String == "" {
+		return fmt.Errorf("%s not set on session %d", column, id)
+	}
+
+	existing, err := parseTimestamp(raw.String)
 	if err != nil {
 		return fmt.Errorf("parse existing %s: %w", column, err)
 	}
 	local := existing.Local()
-	combined := time.Date(local.Year(), local.Month(), local.Day(),
+	base := local
+	// If the stored time is past midnight but before the rollover hour (e.g. 01:59
+	// from an auto-close), and the user sets a time in the prior evening, roll back.
+	if local.Hour() < store.WakeRolloverHour && newTime.Hour() >= store.WakeRolloverHour {
+		base = local.AddDate(0, 0, -1)
+	}
+	combined := time.Date(base.Year(), base.Month(), base.Day(),
 		newTime.Hour(), newTime.Minute(), 0, 0, time.Local)
+
+	parseOpt := func(ns sql.NullString) *time.Time {
+		if !ns.Valid {
+			return nil
+		}
+		t, err := parseTimestamp(ns.String)
+		if err != nil {
+			return nil
+		}
+		return &t
+	}
+	wokeAt := parseOpt(rawWoke)
+	crateAt := parseOpt(rawCrate)
+	sleptAt := parseOpt(rawSlept)
+
+	switch column {
+	case "woke_at":
+		if crateAt != nil && !combined.Before(*crateAt) {
+			return fmt.Errorf("wake time must be before crate time")
+		}
+		if sleptAt != nil && !combined.Before(*sleptAt) {
+			return fmt.Errorf("wake time must be before sleep time")
+		}
+	case "crate_at":
+		if wokeAt != nil && !combined.After(*wokeAt) {
+			return fmt.Errorf("crate time must be after wake time")
+		}
+		if sleptAt != nil && !combined.Before(*sleptAt) {
+			return fmt.Errorf("crate time must be before sleep time")
+		}
+	case "slept_at":
+		if crateAt != nil && !combined.After(*crateAt) {
+			return fmt.Errorf("sleep time must be after crate time")
+		} else if crateAt == nil && wokeAt != nil && !combined.After(*wokeAt) {
+			return fmt.Errorf("sleep time must be after wake time")
+		}
+	}
+
 	_, err = db.Exec(
 		fmt.Sprintf(`UPDATE sessions SET %s = ? WHERE id = ?`, column),
 		store.FormatTimestamp(combined), id,

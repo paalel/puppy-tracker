@@ -44,7 +44,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	}
 	defer rows.Close()
 
-	today := store.Today()
+	today := store.RolloverDate()
 
 	var days []DayStat
 	for rows.Next() {

@@ -45,14 +45,14 @@ func Start(db *sql.DB) {
 				continue
 			}
 			for _, id := range ids {
-				if err := sessions.MarkSessionNotified(db, id); err != nil {
-					log.Printf("ntfy mark notified: %v", err)
-					continue
-				}
 				title := "Time to wind down"
 				body := fmt.Sprintf("%s has been awake for %d minutes", cfg.PuppyName, cfg.WindDownMinutes)
 				if err := sendNtfyNotification(cfg.NtfyTopic, title, body); err != nil {
 					log.Printf("ntfy send: %v", err)
+					continue
+				}
+				if err := sessions.MarkSessionNotified(db, id); err != nil {
+					log.Printf("ntfy mark notified: %v", err)
 				}
 			}
 		}

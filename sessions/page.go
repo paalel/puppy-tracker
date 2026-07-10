@@ -11,14 +11,8 @@ import (
 	"puppy/store"
 )
 
-// wakeDate returns today's date, rolling back to yesterday for wakes before WakeRolloverHour.
-func wakeDate() string {
-	now := time.Now().Local()
-	if now.Hour() < store.WakeRolloverHour {
-		return store.FormatDate(now.AddDate(0, 0, -1))
-	}
-	return store.Today()
-}
+// wakeDate returns the rollover-aware session date for the current moment.
+func wakeDate() string { return store.RolloverDate() }
 
 type PageData struct {
 	Phase          Phase
@@ -44,7 +38,7 @@ type PageData struct {
 
 func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, error) {
 	now := time.Now()
-	today := store.Today()
+	today := store.RolloverDate()
 	isToday := date == today
 
 	d, _ := store.ParseDate(date)

@@ -58,6 +58,7 @@
         {{end}}
 
     </div>
+    <div id="toast-container" class="fixed bottom-6 inset-x-4 flex flex-col items-center gap-2 z-50 pointer-events-none"></div>
     <script>
     // Scroll preservation across HTMX swaps.
     // Capture on hide rather than in htmx:beforeSwap — iOS restores scroll
@@ -71,6 +72,21 @@
     document.addEventListener('htmx:beforeSwap', function() { if (!_fromVis) _sy = window.scrollY; });
     document.addEventListener('htmx:afterSwap', function() { window.scrollTo(0, _sy); _fromVis = false; });
 
+    function showToast(msg) {
+        var el = document.createElement('div');
+        el.className = 'bg-rose-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg pointer-events-auto opacity-0 transition-opacity duration-200';
+        el.textContent = msg;
+        document.getElementById('toast-container').appendChild(el);
+        requestAnimationFrame(function() { requestAnimationFrame(function() { el.style.opacity = '1'; }); });
+        setTimeout(function() {
+            el.style.opacity = '0';
+            setTimeout(function() { el.remove(); }, 200);
+        }, 3500);
+    }
+    document.addEventListener('htmx:responseError', function(evt) {
+        var msg = (evt.detail.xhr.responseText || '').trim();
+        showToast(msg || 'Something went wrong');
+    });
 </script>
 </body>
 </html>
