@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	numFeatures = 4   // intercept, sin_hour, cos_hour, log1p(hours_since_poop)
+	numFeatures = 6   // intercept, sin_hour, cos_hour, sin2_hour, cos2_hour, log1p(hours_since_poop)
 	l2Lambda    = 1.0 // L2 penalty on non-intercept coefficients
 	irlsMaxIter = 50
 	irlsTol     = 1e-8
@@ -48,9 +48,9 @@ func (p *PoopPredictor) Refresh(db *sql.DB) error {
 	return nil
 }
 
-// Predict returns P(poop | utcHour, hoursSincePoop) with 80% credible interval.
-// utcHour is the UTC hour (0–23) of the session's actual or planned wake time.
-func (p *PoopPredictor) Predict(utcHour int, hoursSincePoop float64) (mid, lo, hi float64) {
+// Predict returns P(poop | localHour, hoursSincePoop) with 80% credible interval.
+// localHour is the local clock hour (0–23) of the session's actual or planned wake time.
+func (p *PoopPredictor) Predict(localHour int, hoursSincePoop float64) (mid, lo, hi float64) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -58,7 +58,7 @@ func (p *PoopPredictor) Predict(utcHour int, hoursSincePoop float64) (mid, lo, h
 		return 0, 0, 0
 	}
 
-	fv := featureVec(utcHour, hoursSincePoop)
+	fv := featureVec(localHour, hoursSincePoop)
 
 	var linPred float64
 	for j, v := range fv {
@@ -79,13 +79,18 @@ func (p *PoopPredictor) Predict(utcHour int, hoursSincePoop float64) (mid, lo, h
 	return
 }
 
-func featureVec(utcHour int, hoursSincePoop float64) []float64 {
-	h := float64(utcHour)
+func featureVec(localHour int, hoursSincePoop float64) []float64 {
+	h := float64(localHour)
 	return []float64{
 		1,
 		math.Sin(2 * math.Pi * h / 24),
 		math.Cos(2 * math.Pi * h / 24),
-		math.Log1p(hoursSincePoop),
+		math.Sin(4 * math.Pi * h / 24),
+		math.Cos(4 * math.Pi * h / 24),
+		// Shift by 6h: observed poop rate is flat ~12% for 0–8h (digestive transit),
+		// then rises sharply. Subtracting 6 gives zero urgency during the refractory
+		// period and lets the log grow only after digestion begins.
+		math.Log1p(math.Max(0, hoursSincePoop-6)),
 	}
 }
 
@@ -102,7 +107,7 @@ func fitLogistic(data []trainRow) ([]float64, *mat.Dense, error) {
 	Xdata := make([]float64, n*p)
 	y := make([]float64, n)
 	for i, row := range data {
-		fv := featureVec(row.utcHour, row.hoursSincePoop)
+		fv := featureVec(row.localHour, row.hoursSincePoop)
 		copy(Xdata[i*p:], fv)
 		if row.poop {
 			y[i] = 1
@@ -111,7 +116,7 @@ func fitLogistic(data []trainRow) ([]float64, *mat.Dense, error) {
 	X := mat.NewDense(n, p, Xdata)
 
 	beta := make([]float64, p)
-	var lastHinv *mat.Dense
+	var lastH *mat.Dense
 
 	for range irlsMaxIter {
 		// μ = sigmoid(Xβ)
@@ -141,20 +146,18 @@ func fitLogistic(data []trainRow) ([]float64, *mat.Dense, error) {
 			H.Set(j, j, H.At(j, j)+l2Lambda)
 			g[j] -= l2Lambda * beta[j]
 		}
+		lastH = H
 
-		// Newton step: δ = H⁻¹g, β += δ
-		var Hinv mat.Dense
-		if err := Hinv.Inverse(H); err != nil {
+		// Newton step: solve H·δ = g directly (more stable than inverting H each iteration)
+		gMat := mat.NewDense(p, 1, g)
+		var delta mat.Dense
+		if err := delta.Solve(H, gMat); err != nil {
 			return nil, nil, err
 		}
-		lastHinv = &Hinv
 
 		maxStep := 0.0
 		for j := range p {
-			var dj float64
-			for k := range p {
-				dj += Hinv.At(j, k) * g[k]
-			}
+			dj := delta.At(j, 0)
 			beta[j] += dj
 			if d := math.Abs(dj); d > maxStep {
 				maxStep = d
@@ -165,5 +168,10 @@ func fitLogistic(data []trainRow) ([]float64, *mat.Dense, error) {
 		}
 	}
 
-	return beta, lastHinv, nil
+	// Invert H once at convergence to get the covariance matrix for the delta method CI.
+	var Hinv mat.Dense
+	if err := Hinv.Inverse(lastH); err != nil {
+		return nil, nil, err
+	}
+	return beta, &Hinv, nil
 }

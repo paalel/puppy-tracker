@@ -19,7 +19,7 @@ func syntheticTrainData() []trainRow {
 	}
 	data := make([]trainRow, len(pairs))
 	for i, p := range pairs {
-		data[i] = trainRow{utcHour: 9, hoursSincePoop: p[0], poop: p[1] == 1}
+		data[i] = trainRow{localHour: 9, hoursSincePoop: p[0], poop: p[1] == 1}
 	}
 	return data
 }
@@ -49,9 +49,9 @@ func TestFitLogisticReturnsValidCoefficients(t *testing.T) {
 		}
 	}
 
-	// hours_since_poop coefficient (index 3) must be positive given the signal above
-	if beta[3] <= 0 {
-		t.Errorf("hours_since_poop coefficient = %f, want > 0", beta[3])
+	// hours_since_poop coefficient (index 5) must be positive given the signal above
+	if beta[5] <= 0 {
+		t.Errorf("hours_since_poop coefficient = %f, want > 0", beta[5])
 	}
 }
 

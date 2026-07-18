@@ -374,7 +374,7 @@ func logNightToilet(db *sql.DB, toilet string) error {
 }
 
 type trainRow struct {
-	utcHour        int
+	localHour      int
 	hoursSincePoop float64
 	poop           bool
 }
@@ -384,7 +384,7 @@ type trainRow struct {
 func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 	rows, err := db.Query(`
 		SELECT
-			CAST(strftime('%H', s.woke_at) AS INTEGER) AS utc_hour,
+			CAST(strftime('%H', s.woke_at, 'localtime') AS INTEGER) AS local_hour,
 			(CAST(strftime('%s', s.woke_at) AS REAL) -
 			 CAST(strftime('%s', (
 			     SELECT MAX(p.woke_at) FROM sessions p
@@ -407,13 +407,13 @@ func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 	defer rows.Close()
 	var data []trainRow
 	for rows.Next() {
-		var utcHour, poop int
+		var localHour, poop int
 		var hoursSincePoop float64
-		if err := rows.Scan(&utcHour, &hoursSincePoop, &poop); err != nil {
+		if err := rows.Scan(&localHour, &hoursSincePoop, &poop); err != nil {
 			return nil, err
 		}
 		if hoursSincePoop > 0 {
-			data = append(data, trainRow{utcHour, hoursSincePoop, poop == 1})
+			data = append(data, trainRow{localHour, hoursSincePoop, poop == 1})
 		}
 	}
 	return data, rows.Err()
