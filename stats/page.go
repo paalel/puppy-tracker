@@ -32,10 +32,14 @@ func computeNapBuckets(series *SessionSeries) []napBucket {
 	return buckets
 }
 
-// totalSleepPoints converts day stats into chart points, oldest first, skipping days with no sleep data.
-func totalSleepPoints(days []DayStat) []dailyHours {
+// totalSleepPoints converts day stats into chart points, oldest first, skipping
+// days with no sleep data and the current day (which is still in progress).
+func totalSleepPoints(days []DayStat, today string) []dailyHours {
 	var points []dailyHours
 	for i := len(days) - 1; i >= 0; i-- {
+		if days[i].Date == today {
+			continue
+		}
 		if days[i].TotalSleepMins > 0 {
 			points = append(points, dailyHours{
 				X: days[i].Date,

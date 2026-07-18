@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"puppy/config"
+	"puppy/store"
 )
 
 type Handler struct {
@@ -83,7 +84,7 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		sd.SettleNoneJSON = mustJSON(series.SettleNone)
 
 		sd.NapByTimeJSON = mustJSON(computeNapBuckets(series))
-		sd.TotalSleepJSON = mustJSON(totalSleepPoints(days))
+		sd.TotalSleepJSON = mustJSON(totalSleepPoints(days, store.RolloverDate()))
 
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)

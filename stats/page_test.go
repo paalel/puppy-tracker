@@ -41,7 +41,7 @@ func TestTotalSleepPointsOrderAndFilter(t *testing.T) {
 		{Date: "2026-01-14", TotalSleepMins: 0}, // should be skipped
 		{Date: "2026-01-13", TotalSleepMins: 540},
 	}
-	pts := totalSleepPoints(days)
+	pts := totalSleepPoints(days, "2026-01-16") // today not in set, so no filtering
 
 	if len(pts) != 2 {
 		t.Fatalf("got %d points, want 2 (zero-sleep day skipped)", len(pts))
