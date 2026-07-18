@@ -175,11 +175,14 @@
                 </label>
                 {{end}}
             </div>
-            {{if .SleepDuration}}
-            <p class="text-xs text-indigo-400 mt-0.5 text-right">slept {{.SleepDuration}}{{if .SettleDuration}} · {{.SettleDuration}} to settle{{end}}</p>
-            {{else if .SettleDuration}}
-            <p class="text-xs text-indigo-400 mt-0.5 text-right">{{.SettleDuration}} to settle</p>
-            {{end}}
+            <div class="flex items-center mt-0.5">
+                {{if .SleepDuration}}
+                <p class="text-xs text-indigo-400">after {{.SleepDuration}} nap</p>
+                {{end}}
+                {{if .SettleDuration}}
+                <p class="text-xs text-indigo-400 ml-auto">{{.SettleDuration}} to settle</p>
+                {{end}}
+            </div>
             {{if .ID}}
             {{template "session-fields" .}}
             {{end}}
