@@ -41,7 +41,6 @@ type StatsData struct {
 	TotalPoops       int
 	TotalWakes       int
 	TotalSleepJSON   template.JS
-	NapByTimeJSON    template.JS
 }
 
 func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +82,6 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		sd.SettleHardJSON = mustJSON(series.SettleHard)
 		sd.SettleNoneJSON = mustJSON(series.SettleNone)
 
-		sd.NapByTimeJSON = mustJSON(computeNapBuckets(series))
 		sd.TotalSleepJSON = mustJSON(totalSleepPoints(days, store.RolloverDate()))
 
 	case "toilet":

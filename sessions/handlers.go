@@ -176,7 +176,7 @@ func (h *Handler) handleSetSessionEnum(column string, allowed ...string) http.Ha
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		h.renderStateFragment(w)
+		h.renderStateFragmentForSession(w, id)
 	}
 }
 
@@ -192,7 +192,7 @@ func (h *Handler) handleToggleSessionBool(column string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		h.renderStateFragment(w)
+		h.renderStateFragmentForSession(w, id)
 	}
 }
 
@@ -212,7 +212,7 @@ func (h *Handler) handleSetSessionComment(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderStateFragment(w)
+	h.renderStateFragmentForSession(w, id)
 }
 
 func (h *Handler) handleSetSessionTime(column string) http.HandlerFunc {
@@ -236,13 +236,7 @@ func (h *Handler) handleSetSessionTime(column string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		today := store.RolloverDate()
-		if sessionDate, err := getSessionDate(h.db, id); err == nil && sessionDate != today {
-			w.Header().Set("HX-Redirect", "/?date="+sessionDate)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		h.renderStateFragment(w)
+		h.renderStateFragmentForSession(w, id)
 	}
 }
 
@@ -264,7 +258,7 @@ func (h *Handler) handleToggleToilet(w http.ResponseWriter, r *http.Request) {
 	if err := h.predictor.Refresh(h.db); err != nil {
 		log.Printf("predictor refresh: %v", err)
 	}
-	h.renderStateFragment(w)
+	h.renderStateFragmentForSession(w, id)
 }
 
 func (h *Handler) handleNightToilet(w http.ResponseWriter, r *http.Request) {
@@ -299,11 +293,24 @@ func (h *Handler) renderFragment(w http.ResponseWriter, name string, data any) {
 }
 
 func (h *Handler) renderStateFragment(w http.ResponseWriter) {
-	data, err := buildPageData(h.db, store.RolloverDate(), h.predictor)
+	h.renderStateFragmentForDate(w, store.RolloverDate())
+}
+
+func (h *Handler) renderStateFragmentForDate(w http.ResponseWriter, date string) {
+	data, err := buildPageData(h.db, date, h.predictor)
 	if err != nil {
 		log.Printf("buildPageData: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	h.renderFragment(w, "state", data)
+}
+
+func (h *Handler) renderStateFragmentForSession(w http.ResponseWriter, sessionID int) {
+	today := store.RolloverDate()
+	date := today
+	if d, err := getSessionDate(h.db, sessionID); err == nil && d != "" {
+		date = d
+	}
+	h.renderStateFragmentForDate(w, date)
 }

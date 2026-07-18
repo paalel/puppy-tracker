@@ -199,13 +199,6 @@ func getSessionSeries(db *sql.DB) (*SessionSeries, error) {
 		}
 		if napMins.Valid {
 			s.Nap = append(s.Nap, ChartPoint{X: strings.Replace(sleptAt, " ", "T", 1), Y: int(napMins.Int64)})
-			if t, err := parseTimestamp(sleptAt); err == nil {
-				lt := t.Local()
-				s.NapByTime = append(s.NapByTime, NumericPoint{
-					X: float64(lt.Hour()) + float64(lt.Minute())/60.0,
-					Y: int(napMins.Int64),
-				})
-			}
 		}
 	}
 	return s, rows.Err()

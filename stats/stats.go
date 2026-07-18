@@ -23,11 +23,6 @@ type ChartPoint struct {
 	Y int    `json:"y"`
 }
 
-type NumericPoint struct {
-	X float64 `json:"x"`
-	Y int     `json:"y"`
-}
-
 type SessionSeries struct {
 	Awake      []ChartPoint
 	Nap        []ChartPoint
@@ -35,7 +30,6 @@ type SessionSeries struct {
 	SettleOk   []ChartPoint
 	SettleHard []ChartPoint
 	SettleNone []ChartPoint
-	NapByTime  []NumericPoint
 }
 
 type ToiletAnalytics struct {

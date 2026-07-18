@@ -66,14 +66,6 @@
             </div>
         </div>
 
-        {{/* ── Nap duration by time of day ─────────────────────────────────────── */}}
-        <div class="card p-4">
-            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Nap duration by time of day</p>
-            <p class="text-xs text-stone-400 mb-1">Bar height = expected nap length. Darker bars have more data behind them — tap for details.</p>
-            <div style="position:relative;height:160px">
-                <canvas id="napTimeChart"></canvas>
-            </div>
-        </div>
 
         <script>
         (function() {
@@ -147,47 +139,6 @@
                 });
             })();
 
-            // 3. Nap duration by time of day — expected value + opacity by count
-            (function() {
-                var buckets = {{.NapByTimeJSON}};
-                var maxCount = Math.max.apply(null, buckets.map(function(b) { return b.count; }));
-                var expectedData = buckets.map(function(b) {
-                    return maxCount > 0 ? b.avg * (b.count / maxCount) : 0;
-                });
-                var bgColors = buckets.map(function(b) {
-                    var a = maxCount > 0 ? 0.15 + 0.7 * (b.count / maxCount) : 0.15;
-                    return 'rgba(99,102,241,' + a + ')';
-                });
-                var bdColors = buckets.map(function(b) {
-                    var a = maxCount > 0 ? 0.3 + 0.7 * (b.count / maxCount) : 0.3;
-                    return 'rgba(99,102,241,' + a + ')';
-                });
-                new Chart(document.getElementById('napTimeChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: ['00','02','04','06','08','10','12','14','16','18','20','22'],
-                        datasets: [{ data: expectedData, backgroundColor: bgColors, borderColor: bdColors, borderWidth: 1 }],
-                    },
-                    options: Object.assign({}, OPTS, {
-                        scales: {
-                            x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-                            y: minY('m'),
-                        },
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(ctx) {
-                                        var b = buckets[ctx.dataIndex];
-                                        return b.count === 0 ? 'No data'
-                                            : 'avg ' + Math.round(b.avg) + 'm · ' + b.count + (b.count === 1 ? ' nap' : ' naps');
-                                    },
-                                },
-                            },
-                        },
-                    }),
-                });
-            })();
         })();
         </script>
 
