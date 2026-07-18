@@ -312,7 +312,7 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 		if views[i].ActualSleep != nil && views[i+1].ActualWake != nil {
 			d := views[i+1].ActualWake.Sub(*views[i].ActualSleep)
 			if d > 0 {
-				views[i].SleepDuration = formatDuration(d)
+				views[i+1].SleepDuration = formatDuration(d)
 			}
 		}
 	}

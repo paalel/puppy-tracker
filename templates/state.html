@@ -176,7 +176,7 @@
                 {{end}}
             </div>
             {{if .SleepDuration}}
-            <p class="text-xs text-indigo-400 mt-0.5 text-right">{{.SleepDuration}} nap{{if .SettleDuration}} · {{.SettleDuration}} to settle{{end}}</p>
+            <p class="text-xs text-indigo-400 mt-0.5 text-right">slept {{.SleepDuration}}{{if .SettleDuration}} · {{.SettleDuration}} to settle{{end}}</p>
             {{else if .SettleDuration}}
             <p class="text-xs text-indigo-400 mt-0.5 text-right">{{.SettleDuration}} to settle</p>
             {{end}}
