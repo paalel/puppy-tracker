@@ -35,8 +35,12 @@ type StatsData struct {
 	SettleOkJSON     template.JS
 	SettleHardJSON   template.JS
 	SettleNoneJSON   template.JS
-	AccidentFreeDays int
-	BucketJSON       template.JS
+	AccidentFreeDays    int
+	SettleDayEasyJSON   template.JS
+	SettleDayOkJSON     template.JS
+	SettleDayHardJSON   template.JS
+	SettleDayNoneJSON   template.JS
+	BucketJSON          template.JS
 	KDEJSON          template.JS
 	TotalPoops       int
 	TotalWakes       int
@@ -83,6 +87,16 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		sd.SettleNoneJSON = mustJSON(series.SettleNone)
 
 		sd.TotalSleepJSON = mustJSON(totalSleepPoints(days, store.RolloverDate()))
+
+		easy, ok, hard, none, err := getSettleByDay(h.db, store.RolloverDate())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.SettleDayEasyJSON = mustJSON(easy)
+		sd.SettleDayOkJSON = mustJSON(ok)
+		sd.SettleDayHardJSON = mustJSON(hard)
+		sd.SettleDayNoneJSON = mustJSON(none)
 
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)

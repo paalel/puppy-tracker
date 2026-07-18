@@ -204,6 +204,46 @@ func getSessionSeries(db *sql.DB) (*SessionSeries, error) {
 	return s, rows.Err()
 }
 
+func getSettleByDay(db *sql.DB, today string) (easy, ok, hard, none []ChartPoint, err error) {
+	rows, err := db.Query(`
+		SELECT date, COALESCE(sleep_ease, ''),
+		       SUM(CAST(strftime('%s', slept_at) - strftime('%s', crate_at) AS INTEGER)) / 60
+		FROM sessions
+		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0
+		  AND date >= date('now', '-30 days')
+		  AND date NOT IN (SELECT DISTINCT date FROM sessions WHERE excluded = 1)
+		GROUP BY date, sleep_ease
+		ORDER BY date ASC
+	`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var date, ease string
+		var mins int
+		if err = rows.Scan(&date, &ease, &mins); err != nil {
+			return
+		}
+		if date == today {
+			continue
+		}
+		p := ChartPoint{X: date, Y: mins}
+		switch ease {
+		case "easy":
+			easy = append(easy, p)
+		case "ok":
+			ok = append(ok, p)
+		case "hard":
+			hard = append(hard, p)
+		default:
+			none = append(none, p)
+		}
+	}
+	err = rows.Err()
+	return
+}
+
 func getAccidentFreeDays(db *sql.DB) (int, error) {
 	var s string
 	err := db.QueryRow(`
