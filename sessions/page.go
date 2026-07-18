@@ -268,6 +268,14 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 			}
 		}
 
+		// PlannedSleep is the expected sleep time based on when the puppy actually
+		// woke up (if known), so the cascade to future sessions stays accurate even
+		// when a session ran long (e.g. vet visit).
+		plannedSleep := plannedWake.Add(awake)
+		if aw != nil {
+			plannedSleep = aw.Local().Add(awake)
+		}
+
 		views[i] = SessionView{
 			ID:                    id,
 			Index:                 i,
@@ -275,7 +283,7 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 			Label:                 rs.Label,
 			Activities:            rs.Activities,
 			PlannedWake:           plannedWake,
-			PlannedSleep:          plannedWake.Add(awake),
+			PlannedSleep:          plannedSleep,
 			ActualWake:            aw,
 			ActualCrate:           ac,
 			ActualSleep:           as,
