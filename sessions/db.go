@@ -356,22 +356,6 @@ func getPoopStatus(db *sql.DB) (*PoopStatus, error) {
 	return &PoopStatus{LastPoop: &last}, nil
 }
 
-func logNightToilet(db *sql.DB, toilet string) error {
-	pee, poop, accident := 0, 0, 0
-	switch toilet {
-	case "pee":
-		pee = 1
-	case "poop":
-		poop = 1
-	case "accident":
-		accident = 1
-	}
-	_, err := db.Exec(
-		`INSERT INTO night_toilets (occurred_at, toilet, toilet_pee, toilet_poop, toilet_accident) VALUES (?, ?, ?, ?, ?)`,
-		nowUTC(), toilet, pee, poop, accident,
-	)
-	return err
-}
 
 type trainRow struct {
 	localHour      int

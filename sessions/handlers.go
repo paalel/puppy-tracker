@@ -44,7 +44,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/session/{id}/calm-winddown", h.handleToggleSessionBool("calm_winddown"))
 	mux.HandleFunc("POST /api/session/{id}/environmental-activity", h.handleToggleSessionBool("environmental_activity"))
 	mux.HandleFunc("POST /api/session/{id}/excluded", h.handleToggleSessionBool("excluded"))
-	mux.HandleFunc("POST /api/night-toilet", h.handleNightToilet)
 }
 
 func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -259,25 +258,6 @@ func (h *Handler) handleToggleToilet(w http.ResponseWriter, r *http.Request) {
 		log.Printf("predictor refresh: %v", err)
 	}
 	h.renderStateFragmentForSession(w, id)
-}
-
-func (h *Handler) handleNightToilet(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	value := r.FormValue("value")
-	allowed := map[string]bool{"pee": true, "poop": true, "accident": true}
-	if !allowed[value] {
-		http.Error(w, "invalid value", http.StatusBadRequest)
-		return
-	}
-	if err := logNightToilet(h.db, value); err != nil {
-		log.Printf("logNightToilet: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.renderStateFragment(w)
 }
 
 func (h *Handler) renderFragment(w http.ResponseWriter, name string, data any) {

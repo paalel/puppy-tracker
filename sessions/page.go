@@ -27,7 +27,6 @@ type PageData struct {
 	DBPath         string
 	Date           string
 	IsToday        bool
-	IsNight        bool
 	PrevDate       string
 	NextDate       string
 	PoopStatus     *PoopStatus
@@ -104,9 +103,6 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		return nil, fmt.Errorf("poop status: %w", err)
 	}
 
-	hr := now.Local().Hour()
-	isNight := hr >= 21 || hr < store.WakeRolloverHour
-
 	views := buildSchedule(date, dbSessions, routineSessions, cfg)
 
 	if pred != nil && isToday {
@@ -159,7 +155,6 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		DBPath:         os.Getenv("DATABASE_PATH"),
 		Date:           date,
 		IsToday:        isToday,
-		IsNight:        isNight,
 		PrevDate:       prevDate,
 		NextDate:       nextDate,
 		PoopStatus:     ps,

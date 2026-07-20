@@ -65,22 +65,6 @@
             {{.Config.PuppyName}} Woke Up
         </button>
     </form>
-    {{if .IsNight}}
-    <div class="mt-4 pt-4 border-t border-stone-100">
-        <p class="section-label">Night toilet</p>
-        <div class="flex items-center gap-1">
-            <form hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="value" value="pee"      type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Pee</button>
-            </form>
-            <form hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="value" value="poop"     type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Poop</button>
-            </form>
-            <form hx-post="/api/night-toilet" hx-target="#state-container" hx-swap="innerHTML">
-                <button name="value" value="accident" type="submit" class="btn-badge bg-stone-100 text-stone-400 hover:text-stone-600">Oops</button>
-            </form>
-        </div>
-    </div>
-    {{end}}
     {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "session-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/sleep-adjust" "Label" "Fell asleep at" "Time" .LastSleptAt}}
     {{template "undo-phase" .}}

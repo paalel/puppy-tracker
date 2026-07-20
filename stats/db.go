@@ -302,34 +302,6 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 		return nil, err
 	}
 
-	nrows, err := db.Query(`SELECT occurred_at, toilet_poop FROM night_toilets ORDER BY occurred_at ASC`)
-	if err != nil {
-		return nil, err
-	}
-	defer nrows.Close()
-	for nrows.Next() {
-		var s string
-		var poopInt int
-		if err := nrows.Scan(&s, &poopInt); err != nil {
-			return nil, err
-		}
-		t, err := parseTimestamp(s)
-		if err != nil {
-			continue
-		}
-		lt := t.Local()
-		h := lt.Hour()
-		opportunities[h]++
-		if poopInt == 1 {
-			buckets[h]++
-			poopCounts[h]++
-			poopTimes = append(poopTimes, float64(lt.Hour())+float64(lt.Minute())/60.0)
-		}
-	}
-	if err := nrows.Err(); err != nil {
-		return nil, err
-	}
-
 	totalWakes := 0
 	for _, v := range opportunities {
 		totalWakes += v

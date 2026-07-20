@@ -142,7 +142,7 @@ When the app loads today's view, it predicts for:
 
 4. **Stationarity.** The model assumes the underlying poop distribution is stable and weights all historical observations equally. As the dog ages or the routine changes, older observations may become less representative. A natural improvement would be exponential time-decay weighting (`w_i = e^(−α × days_ago)`), which would cause the model to prioritise recent behaviour without discarding history entirely.
 
-5. **Night toilets don't reset the clock.** If the dog is taken out at night and poops, this is not currently fed into `hours_since_poop`. In practice this is rarely relevant — night poops have not occurred for an extended period, and when they did occur they happened very early in the overnight sleep window, leaving enough hours that the model's urgency estimate by morning would still be reasonable.
+5. **Night toilets are not modelled.** Night toilet tracking has been removed from the app as she reliably sleeps through the night. The `night_toilets` table remains in the database for historical data but is no longer written to or read by the model.
 
 6. **All non-excluded sessions are equally informative.** Unusual-but-included days (e.g. days with lots of extra treats or a particularly exciting environmental session) receive equal weight.
 
@@ -159,7 +159,7 @@ These are signals that plausibly affect poop timing but are not in the model:
 | **Calm wind-down snacks** | Sessions with calm wind-down enabled typically include a snack to help her relax before crating. This is a small but regular food event that is not tracked separately. |
 | **Physical activity level** | Logged per session (yes/no) but not used as a feature. High physical activity likely speeds up digestion. |
 | **Environmental activity** | Logged per session (yes/no). Novel environments (vet, park) may cause stress-related urgency. |
-| **Night toilet poops** | Recorded in a separate table. Currently excluded from both training data and the `hours_since_poop` calculation. Practically a non-issue as night poops have not occurred for an extended period. |
+| **Night toilet poops** | Night toilet tracking removed from the app. Historical data remains in the database but is no longer used. |
 | **Hydration** | Not tracked. Affects stool consistency and possibly timing. |
 | **Age / developmental stage** | Not included. Puppy bowel control improves significantly over the first 6–12 months. |
 | **Training quality / overtired flag** | Logged per session but not used. Overtired sessions might correlate with higher stress and therefore urgency. |
