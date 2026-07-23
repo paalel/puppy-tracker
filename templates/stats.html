@@ -19,15 +19,6 @@
             <a href="/" class="text-sm text-stone-400 hover:text-stone-600 transition-colors">← Back</a>
         </header>
 
-        {{/* ── Accident streak ────────────────────────────────────────────────── */}}
-        <div class="card px-5 py-3 mb-4 flex items-center gap-3">
-            <div class="text-2xl font-bold text-emerald-500">{{.AccidentFreeDays}}</div>
-            <div>
-                <p class="text-sm font-medium text-stone-700">days accident-free</p>
-                <p class="text-xs text-stone-400">keep it up!</p>
-            </div>
-        </div>
-
         {{/* ── Tabs ───────────────────────────────────────────────────────────── */}}
         <div class="flex gap-1 mb-5 bg-stone-100 rounded-xl p-1">
             <a href="/stats" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
@@ -177,6 +168,36 @@
         </script>
 
         {{else if eq .Tab "toilet"}}
+
+        {{/* ── Accident streak ────────────────────────────────────────────────── */}}
+        {{with .AccidentStats}}
+        <div class="card px-5 py-3 mb-4">
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-2xl font-bold {{if eq .CurrentStreak 0}}text-rose-500{{else}}text-emerald-500{{end}}">{{.CurrentStreak}}</p>
+                    <p class="text-xs text-stone-400">days accident-free</p>
+                </div>
+                <div class="h-8 w-px bg-stone-100"></div>
+                <div>
+                    <p class="text-2xl font-bold text-stone-300">{{.RecordStreak}}</p>
+                    <p class="text-xs text-stone-400">record</p>
+                </div>
+                <div class="ml-auto text-right">
+                    {{if eq .CurrentStreak 0}}
+                    <p class="text-xs text-rose-400">Oops — back to zero</p>
+                    {{else if gt .CurrentStreak .RecordStreak}}
+                    <p class="text-xs text-emerald-500 font-medium">New record! 🎉</p>
+                    {{else if ge .CurrentStreak (div (mul .RecordStreak 9) 10)}}
+                    <p class="text-xs text-amber-500 font-medium">So close to the record!</p>
+                    {{else if ge .CurrentStreak (div .RecordStreak 2)}}
+                    <p class="text-xs text-stone-400">Halfway to the record</p>
+                    {{else}}
+                    <p class="text-xs text-stone-400">Keep it up!</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
 
         {{/* ── Toilet distribution ───────────────────────────────────────────── */}}
         <div class="card p-4">

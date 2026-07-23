@@ -14,9 +14,6 @@ const (
 	kdeBandwidth  = 1.5
 )
 
-// lastAccidentBefore is the hardcoded baseline until a new accident is logged in the DB.
-// Her last accident was 2026-06-20 14:00 CEST = 12:00 UTC.
-var lastAccidentBefore = time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 
 func parseTimestamp(s string) (time.Time, error) { return store.ParseTimestamp(s) }
 
@@ -244,25 +241,76 @@ func getSettleByDay(db *sql.DB, today string) (easy, ok, hard, none []ChartPoint
 	return
 }
 
-func getAccidentFreeDays(db *sql.DB) (int, error) {
-	var s string
-	err := db.QueryRow(`
+type AccidentStats struct {
+	CurrentStreak int
+	RecordStreak  int
+}
+
+func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
+	// Collect all accident timestamps in order.
+	rows, err := db.Query(`
 		SELECT woke_at FROM sessions
 		WHERE toilet_accident = 1 AND woke_at IS NOT NULL
-		ORDER BY woke_at DESC LIMIT 1
-	`).Scan(&s)
+		ORDER BY woke_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-	var since time.Time
-	if err == sql.ErrNoRows {
-		since = lastAccidentBefore
-	} else if err != nil {
-		return 0, err
-	} else if t, err := parseTimestamp(s); err == nil {
-		since = t
+	var accidents []time.Time
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		if t, err := parseTimestamp(s); err == nil {
+			accidents = append(accidents, t)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
-	days := int(time.Since(since).Hours() / 24)
-	return days, nil
+	// Find start of tracking (first session).
+	var firstStr sql.NullString
+	err = db.QueryRow(`SELECT MIN(woke_at) FROM sessions WHERE woke_at IS NOT NULL AND COALESCE(excluded,0)=0`).Scan(&firstStr)
+	if err != nil {
+		return nil, err
+	}
+	if !firstStr.Valid {
+		return &AccidentStats{}, nil
+	}
+	start, err := parseTimestamp(firstStr.String)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+
+	// Build list of streak boundaries: [start, acc1, acc2, ..., now]
+	// Each gap between adjacent points is a clean streak.
+	points := make([]time.Time, 0, len(accidents)+2)
+	points = append(points, start)
+	points = append(points, accidents...)
+	points = append(points, now)
+
+	record := 0
+	for i := 1; i < len(points); i++ {
+		days := int(points[i].Sub(points[i-1]).Hours() / 24)
+		if days > record {
+			record = days
+		}
+	}
+
+	var current int
+	if len(accidents) == 0 {
+		current = int(now.Sub(start).Hours() / 24)
+	} else {
+		current = int(now.Sub(accidents[len(accidents)-1]).Hours() / 24)
+	}
+
+	return &AccidentStats{CurrentStreak: current, RecordStreak: record}, nil
 }
 
 func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {

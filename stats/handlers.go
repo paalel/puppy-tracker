@@ -35,7 +35,7 @@ type StatsData struct {
 	SettleOkJSON     template.JS
 	SettleHardJSON   template.JS
 	SettleNoneJSON   template.JS
-	AccidentFreeDays    int
+	AccidentStats       *AccidentStats
 	SettleDayEasyJSON   template.JS
 	SettleDayOkJSON     template.JS
 	SettleDayHardJSON   template.JS
@@ -63,17 +63,11 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		tab = "log"
 	}
 
-	accidentDays, err := getAccidentFreeDays(h.db)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	mustJSON := func(v any) template.JS {
 		b, _ := json.Marshal(v)
 		return template.JS(b)
 	}
-	sd := &StatsData{Days: days, Config: cfg, Tab: tab, AccidentFreeDays: accidentDays}
+	sd := &StatsData{Days: days, Config: cfg, Tab: tab}
 	switch tab {
 	case "sleep":
 		series, err := getSessionSeries(h.db)
@@ -110,6 +104,12 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		if ta.KDE != nil {
 			sd.KDEJSON = mustJSON(ta.KDE)
 		}
+		as, err := getAccidentStats(h.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.AccidentStats = as
 	}
 
 	var buf bytes.Buffer

@@ -13,6 +13,8 @@ import (
 
 func parseTemplates() (*template.Template, error) {
 	funcs := template.FuncMap{
+		"div": func(a, b int) int { return a / b },
+		"mul": func(a, b int) int { return a * b },
 		"isPhase": func(p sessions.Phase, name string) bool {
 			return p == sessions.Phase(name)
 		},
