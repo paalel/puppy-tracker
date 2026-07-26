@@ -103,7 +103,12 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		return nil, fmt.Errorf("poop status: %w", err)
 	}
 
-	views := buildSchedule(date, dbSessions, routineSessions, cfg)
+	var views []SessionView
+	if isToday {
+		views = buildSchedule(date, dbSessions, routineSessions, cfg)
+	} else {
+		views = buildPastSchedule(dbSessions, routineSessions)
+	}
 
 	if pred != nil && isToday {
 		hoursSincePoop, _ := getHoursSinceLastPoop(db)
@@ -162,6 +167,90 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		PoopLo:         poopLo,
 		PoopHi:         poopHi,
 	}, nil
+}
+
+// buildPastSchedule renders past days directly from DB sessions, ordered by
+// woke_at. Uses the current routine only for labels; sessions whose routine
+// slot was deleted still appear with a generic label.
+func buildPastSchedule(dbSessions []dbSession, routineSessions []routine.RoutineSession) []SessionView {
+	labelByID := make(map[int]string, len(routineSessions))
+	for _, rs := range routineSessions {
+		labelByID[rs.ID] = rs.Label
+	}
+
+	views := make([]SessionView, 0, len(dbSessions))
+	for i, s := range dbSessions {
+		var aw, ac, as *time.Time
+		if s.WokeAt != nil {
+			t := s.WokeAt.Local()
+			aw = &t
+		}
+		if s.CrateAt != nil {
+			t := s.CrateAt.Local()
+			ac = &t
+		}
+		if s.SleptAt != nil {
+			t := s.SleptAt.Local()
+			as = &t
+		}
+
+		label := "Session"
+		if s.RoutineSessionID != nil {
+			if l, ok := labelByID[*s.RoutineSessionID]; ok {
+				label = l
+			}
+		}
+
+		var actualDuration, durationClass string
+		if aw != nil && as != nil {
+			dur := as.Sub(*aw)
+			actualDuration = formatDuration(dur)
+			durationClass = "text-stone-400"
+		}
+		var settleDuration string
+		if ac != nil && as != nil {
+			if d := as.Sub(*ac); d > 0 {
+				settleDuration = formatDuration(d)
+			}
+		}
+
+		views = append(views, SessionView{
+			ID:                    s.ID,
+			Index:                 i,
+			Label:                 label,
+			ActualWake:            aw,
+			ActualCrate:           ac,
+			ActualSleep:           as,
+			IsPast:                as != nil,
+			IsActive:              aw != nil && as == nil,
+			ActualDuration:        actualDuration,
+			DurationClass:         durationClass,
+			SettleDuration:        settleDuration,
+			Comment:               s.Comment,
+			SleepEase:             s.SleepEase,
+			Overtired:             s.Overtired,
+			ToiletPee:             s.ToiletPee,
+			ToiletPoop:            s.ToiletPoop,
+			ToiletAccident:        s.ToiletAccident,
+			TrainingQuality:       s.TrainingQuality,
+			PhysicalActivity:      s.PhysicalActivity,
+			MentalActivity:        s.MentalActivity,
+			CalmWinddown:          s.CalmWinddown,
+			EnvironmentalActivity: s.EnvironmentalActivity,
+			Excluded:              s.Excluded,
+		})
+	}
+
+	for i := 0; i < len(views)-1; i++ {
+		if views[i].ActualSleep != nil && views[i+1].ActualWake != nil {
+			d := views[i+1].ActualWake.Sub(*views[i].ActualSleep)
+			if d > 0 {
+				views[i+1].SleepDuration = formatDuration(d)
+			}
+		}
+	}
+
+	return views
 }
 
 var baseWakeTimes = []string{"09:00"}
