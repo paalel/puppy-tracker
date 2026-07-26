@@ -74,11 +74,13 @@
                 interaction: { mode: 'nearest', intersect: false },
                 plugins: { legend: { display: false } },
                 onClick: function(evt, elements, chart) {
-                    var hit = chart.getElementsAtEventForMode(evt.native, 'nearest', { intersect: true }, false);
-                    if (!hit.length) {
+                    if (chart._tipActive) {
                         chart.tooltip.setActiveElements([], evt);
                         chart.setActiveElements([]);
                         chart.update('none');
+                        chart._tipActive = false;
+                    } else if (elements.length) {
+                        chart._tipActive = true;
                     }
                 },
             };
