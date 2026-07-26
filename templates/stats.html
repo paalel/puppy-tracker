@@ -73,17 +73,23 @@
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'nearest', intersect: false },
                 plugins: { legend: { display: false } },
-                onClick: function(evt, elements, chart) {
-                    if (chart._tipActive) {
-                        chart.tooltip.setActiveElements([], evt);
+            };
+
+            // First tap shows tooltip; second tap anywhere dismisses it.
+            // Uses touchend directly because iOS Safari's onClick is unreliable
+            // for scatter/line charts.
+            function makeDeselectable(chart) {
+                chart.canvas.addEventListener('touchend', function() {
+                    if (chart._tipShown) {
+                        chart.tooltip.setActiveElements([], {x: 0, y: 0});
                         chart.setActiveElements([]);
                         chart.update('none');
-                        chart._tipActive = false;
-                    } else if (elements.length) {
-                        chart._tipActive = true;
+                        chart._tipShown = false;
+                    } else {
+                        chart._tipShown = true;
                     }
-                },
-            };
+                }, { passive: true });
+            }
             var timeX = {
                 type: 'time',
                 time: { unit: 'day', displayFormats: { day: 'dd/MM' } },
@@ -98,7 +104,7 @@
             };
 
             // 1. Total sleep
-            new Chart(document.getElementById('totalSleepChart'), {
+            var c1 = new Chart(document.getElementById('totalSleepChart'), {
                 type: 'line',
                 data: { datasets: [{
                     data: {{.TotalSleepJSON}},
@@ -114,9 +120,10 @@
                     ticks: { font: { size: 10 }, callback: function(v) { return v + 'h'; } },
                 }}}),
             });
+            makeDeselectable(c1);
 
             // 2. Daily settle time stacked by ease
-            new Chart(document.getElementById('settleDayChart'), {
+            var c2 = new Chart(document.getElementById('settleDayChart'), {
                 type: 'bar',
                 data: { datasets: [
                     { label: 'Easy',     data: {{.SettleDayEasyJSON}}, backgroundColor: 'rgba(16,185,129,0.85)',  stack: 'settle' },
@@ -139,6 +146,7 @@
                     },
                 }),
             });
+            makeDeselectable(c2);
 
             // 3. Settle time over time — colored by sleep ease + 5-session rolling average
             (function() {
@@ -154,7 +162,7 @@
                     var avg = slice.reduce(function(s, q) { return s + q.y; }, 0) / slice.length;
                     return { x: p.x, y: Math.round(avg * 10) / 10 };
                 });
-                new Chart(document.getElementById('settleChart'), {
+                var c3 = new Chart(document.getElementById('settleChart'), {
                     type: 'scatter',
                     data: { datasets: [
                         { label: 'Easy',     data: {{.SettleEasyJSON}}, backgroundColor: 'rgba(16,185,129,0.7)',  borderColor: 'rgb(16,185,129)',   pointRadius: 4 },
@@ -172,6 +180,7 @@
                         scales: { x: timeX, y: minY('m') },
                     }),
                 });
+                makeDeselectable(c3);
             })();
 
         })();
