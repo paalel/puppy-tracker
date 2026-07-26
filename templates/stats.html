@@ -73,6 +73,13 @@
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'nearest', intersect: false },
                 plugins: { legend: { display: false } },
+                onClick: function(event, elements, chart) {
+                    if (!elements.length) {
+                        chart.tooltip.setActiveElements([]);
+                        chart.setActiveElements([]);
+                        chart.update();
+                    }
+                },
             };
             var timeX = {
                 type: 'time',
