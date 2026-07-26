@@ -75,19 +75,24 @@
                 plugins: { legend: { display: false } },
             };
 
-            // First tap shows tooltip; second tap anywhere dismisses it.
-            // Uses touchend directly because iOS Safari's onClick is unreliable
-            // for scatter/line charts.
+            // Second tap anywhere dismisses tooltip on iOS Safari.
+            // Problem: Chart.js registers its touchend listener at chart-creation time;
+            // ours is registered after, so it fires second. Chart.js re-shows the tooltip
+            // after we clear it. Fix: snapshot active state on touchstart (before Chart.js
+            // processes the touch), then defer the clear past Chart.js's RAF in touchend.
             function makeDeselectable(chart) {
+                chart.canvas.addEventListener('touchstart', function() {
+                    chart._wasActive = chart.getActiveElements().length > 0;
+                }, { passive: true });
                 chart.canvas.addEventListener('touchend', function() {
-                    if (chart._tipShown) {
-                        chart.tooltip.setActiveElements([], {x: 0, y: 0});
-                        chart.setActiveElements([]);
-                        chart.update('none');
-                        chart._tipShown = false;
-                    } else {
-                        chart._tipShown = true;
+                    if (chart._wasActive) {
+                        setTimeout(function() {
+                            chart.tooltip.setActiveElements([], {x: 0, y: 0});
+                            chart.setActiveElements([]);
+                            chart.update('none');
+                        }, 50);
                     }
+                    chart._wasActive = false;
                 }, { passive: true });
             }
             var timeX = {
