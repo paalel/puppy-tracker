@@ -73,11 +73,12 @@
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'nearest', intersect: false },
                 plugins: { legend: { display: false } },
-                onClick: function(event, elements, chart) {
-                    if (!elements.length) {
-                        chart.tooltip.setActiveElements([]);
+                onClick: function(evt, elements, chart) {
+                    var hit = chart.getElementsAtEventForMode(evt.native, 'nearest', { intersect: true }, false);
+                    if (!hit.length) {
+                        chart.tooltip.setActiveElements([], evt);
                         chart.setActiveElements([]);
-                        chart.update();
+                        chart.update('none');
                     }
                 },
             };
