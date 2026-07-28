@@ -271,12 +271,17 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 		}
 	}
 
+	// Track which DB sessions are consumed by a routine slot so we can
+	// append any extras at the end.
+	consumedDBIDs := make(map[int]bool, len(dbSessions))
+
 	views := make([]SessionView, len(routineSessions))
 
 	for i, rs := range routineSessions {
 		var dbSess *dbSession
 		if s, ok := dbByRoutineID[rs.ID]; ok {
 			dbSess = &s
+			consumedDBIDs[s.ID] = true
 		}
 
 		var plannedWake time.Time
@@ -390,6 +395,73 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 			SettleDuration:        settleDuration,
 			Excluded:              excluded,
 		}
+	}
+
+	// Append any DB sessions that weren't matched to a routine slot.
+	for _, s := range dbSessions {
+		if consumedDBIDs[s.ID] {
+			continue
+		}
+		var aw, ac, as *time.Time
+		if s.WokeAt != nil {
+			t := s.WokeAt.Local()
+			aw = &t
+		}
+		if s.CrateAt != nil {
+			t := s.CrateAt.Local()
+			ac = &t
+		}
+		if s.SleptAt != nil {
+			t := s.SleptAt.Local()
+			as = &t
+		}
+		var actualDuration, durationClass, settleDuration string
+		if aw != nil && as != nil {
+			dur := as.Sub(*aw)
+			actualDuration = formatDuration(dur)
+			diff := dur - awake
+			if diff < 0 {
+				diff = -diff
+			}
+			switch {
+			case diff.Minutes() < 10:
+				durationClass = "text-emerald-600"
+			case diff.Minutes() < 20:
+				durationClass = "text-amber-500"
+			default:
+				durationClass = "text-rose-500"
+			}
+		}
+		if ac != nil && as != nil {
+			if d := as.Sub(*ac); d > 0 {
+				settleDuration = formatDuration(d)
+			}
+		}
+		views = append(views, SessionView{
+			ID:                    s.ID,
+			Index:                 len(views),
+			IsPast:                as != nil,
+			IsActive:              aw != nil && as == nil,
+			IsFuture:              aw == nil,
+			ActualWake:            aw,
+			ActualCrate:           ac,
+			ActualSleep:           as,
+			ActualDuration:        actualDuration,
+			DurationClass:         durationClass,
+			SettleDuration:        settleDuration,
+			Comment:               s.Comment,
+			SleepEase:             s.SleepEase,
+			Overtired:             s.Overtired,
+			ToiletPee:             s.ToiletPee,
+			ToiletPoop:            s.ToiletPoop,
+			ToiletAccident:        s.ToiletAccident,
+			TrainingQuality:       s.TrainingQuality,
+			PhysicalActivity:      s.PhysicalActivity,
+			MentalActivity:        s.MentalActivity,
+			CalmWinddown:          s.CalmWinddown,
+			EnvironmentalActivity: s.EnvironmentalActivity,
+			Excluded:              s.Excluded,
+		})
 	}
 
 	for i := 0; i < len(views)-1; i++ {
