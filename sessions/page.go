@@ -253,8 +253,6 @@ func buildPastSchedule(dbSessions []dbSession, routineSessions []routine.Routine
 	return views
 }
 
-var baseWakeTimes = []string{"09:00"}
-
 // buildSchedule constructs the day's session list with planned times adjusted
 // by actual data. Each session's planned wake = previous session's actual_slept_at
 // + napMins, cascading forward through the day.
@@ -289,7 +287,7 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 			if dbSess != nil && dbSess.WokeAt != nil {
 				plannedWake = dbSess.WokeAt.Local()
 			} else {
-				h, m := parseHHMM(baseWakeTimes[0])
+				h, m := parseHHMM(cfg.FirstWakeTime)
 				plannedWake = today.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute)
 			}
 		} else {

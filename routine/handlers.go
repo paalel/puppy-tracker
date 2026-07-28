@@ -3,6 +3,7 @@ package routine
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -19,10 +20,15 @@ func New(db *sql.DB, tmpl *template.Template) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/routine/sessions", h.handleGetFrag)
 	mux.HandleFunc("POST /api/routine/session", h.handleCreate)
 	mux.HandleFunc("POST /api/routine/session/{id}", h.handleUpdate)
 	mux.HandleFunc("POST /api/routine/session/{id}/delete", h.handleDelete)
 	mux.HandleFunc("POST /api/routine/session/{id}/move/{dir}", h.handleMove)
+}
+
+func (h *Handler) handleGetFrag(w http.ResponseWriter, r *http.Request) {
+	h.renderFrag(w)
 }
 
 func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -97,8 +103,37 @@ func (h *Handler) renderFrag(w http.ResponseWriter) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Query config directly to avoid circular import with the config package.
+	firstWake, awakeMins, napMins := "09:00", 60, 120
+	rows, _ := h.db.Query(`SELECT key, value FROM config WHERE key IN ('first_wake_time','awake_minutes','nap_minutes')`)
+	if rows != nil {
+		for rows.Next() {
+			var k, v string
+			rows.Scan(&k, &v)
+			switch k {
+			case "first_wake_time":
+				if v != "" {
+					firstWake = v
+				}
+			case "awake_minutes":
+				var n int
+				if _, err := fmt.Sscan(v, &n); err == nil && n > 0 {
+					awakeMins = n
+				}
+			case "nap_minutes":
+				var n int
+				if _, err := fmt.Sscan(v, &n); err == nil && n > 0 {
+					napMins = n
+				}
+			}
+		}
+		rows.Close()
+	}
+
+	section := BuildSection(sessions, firstWake, awakeMins, napMins)
 	var buf bytes.Buffer
-	if err := h.tmpl.ExecuteTemplate(&buf, "routine-sessions", sessions); err != nil {
+	if err := h.tmpl.ExecuteTemplate(&buf, "routine-sessions", section); err != nil {
 		log.Printf("routine-sessions template: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

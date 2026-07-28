@@ -28,8 +28,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 type SettingsData struct {
-	Config          *Config
-	RoutineSessions []routine.RoutineSession
+	Config         *Config
+	RoutineSection routine.SectionData
 }
 
 func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -43,8 +43,9 @@ func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	section := routine.BuildSection(rs, cfg.FirstWakeTime, cfg.AwakeMinutes, cfg.NapMinutes)
 	var buf bytes.Buffer
-	if err := h.tmpl.ExecuteTemplate(&buf, "settings-page", &SettingsData{Config: cfg, RoutineSessions: rs}); err != nil {
+	if err := h.tmpl.ExecuteTemplate(&buf, "settings-page", &SettingsData{Config: cfg, RoutineSection: section}); err != nil {
 		log.Printf("settings template: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -62,6 +63,7 @@ func (h *Handler) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	awakeMins, _ := strconv.Atoi(r.FormValue("awake_minutes"))
 	napMins, _ := strconv.Atoi(r.FormValue("nap_minutes"))
 	windDownMins, _ := strconv.Atoi(r.FormValue("wind_down_minutes"))
+	firstWakeTime := strings.TrimSpace(r.FormValue("first_wake_time"))
 
 	current, err := Get(h.db)
 	if err != nil {
@@ -80,6 +82,9 @@ func (h *Handler) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	if windDownMins <= 0 {
 		windDownMins = current.WindDownMinutes
 	}
+	if firstWakeTime == "" {
+		firstWakeTime = current.FirstWakeTime
+	}
 
 	var birthdate *time.Time
 	if raw := r.FormValue("puppy_birthdate"); raw != "" {
@@ -90,7 +95,7 @@ func (h *Handler) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 		birthdate = current.Birthdate
 	}
 
-	cfg := &Config{PuppyName: name, Birthdate: birthdate, AwakeMinutes: awakeMins, NapMinutes: napMins, WindDownMinutes: windDownMins}
+	cfg := &Config{PuppyName: name, Birthdate: birthdate, AwakeMinutes: awakeMins, NapMinutes: napMins, WindDownMinutes: windDownMins, FirstWakeTime: firstWakeTime}
 	if err := Save(h.db, cfg); err != nil {
 		log.Printf("saveConfig: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

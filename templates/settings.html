@@ -21,7 +21,8 @@
         </header>
 
         {{/* ── Puppy & Timing form ── */}}
-        <form hx-post="/settings" hx-swap="none" hx-trigger="change">
+        <form hx-post="/settings" hx-swap="none" hx-trigger="change"
+              hx-on::after-request="htmx.ajax('GET','/api/routine/sessions',{target:'#routine-sessions',swap:'innerHTML'})">
             <div class="card overflow-hidden mb-4">
                 <div class="px-4 pt-4 pb-3 border-b border-stone-100">
                     <h2 class="card-heading">Puppy</h2>
@@ -85,6 +86,16 @@
                         </div>
                     </div>
                     <div class="px-4 py-4">
+                        <label class="block text-sm font-medium text-stone-700 mb-0.5" for="first_wake_time">First wake time</label>
+                        <p class="text-xs text-stone-400 mb-2">Estimated time the puppy wakes up for the first session</p>
+                        <input
+                            type="time"
+                            id="first_wake_time"
+                            name="first_wake_time"
+                            value="{{.Config.FirstWakeTime}}"
+                            class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-800 focus:outline-none focus:border-stone-400 focus:bg-white transition-colors">
+                    </div>
+                    <div class="px-4 py-4">
                         <label class="block text-sm font-medium text-stone-700 mb-0.5" for="wind_down_minutes">Wind-down warning</label>
                         <p class="text-xs text-stone-400 mb-2">Show wind-down prompt after this many minutes awake</p>
                         <div class="flex items-center gap-2">
@@ -112,7 +123,7 @@
         </div>
 
         <div id="routine-sessions">
-            {{template "routine-sessions" .RoutineSessions}}
+            {{template "routine-sessions" .RoutineSection}}
         </div>
 
     </div>
@@ -122,13 +133,26 @@
 
 
 {{define "routine-sessions"}}
-{{range .}}
+<div class="card overflow-hidden mb-4">
+    <div class="flex divide-x divide-stone-100">
+        <div class="flex-1 px-4 py-3 text-center">
+            <p class="text-lg font-semibold text-stone-700">{{.TotalAwakeStr}}</p>
+            <p class="text-xs text-stone-400">awake</p>
+        </div>
+        <div class="flex-1 px-4 py-3 text-center">
+            <p class="text-lg font-semibold text-stone-700">{{.TotalSleepStr}}</p>
+            <p class="text-xs text-stone-400">asleep</p>
+        </div>
+    </div>
+</div>
+{{range .Sessions}}
 <div class="card overflow-hidden mb-3">
 
     {{/* Top bar */}}
     <div class="flex items-center gap-1.5 px-4 py-3 border-b border-stone-100 bg-stone-50">
         <span class="text-xs text-stone-400 font-mono w-4 flex-shrink-0">{{.Position}}</span>
         <span class="text-sm font-medium text-stone-700 flex-1 truncate">{{.Label}}</span>
+        <span class="text-xs text-stone-400 font-mono mr-1">{{.PlannedWake}} → {{.PlannedSleep}}</span>
         <form hx-post="/api/routine/session/{{.ID}}/move/up" hx-target="#routine-sessions" hx-swap="innerHTML" class="inline">
             <button type="submit" title="Move up"
                 class="w-7 h-7 rounded-lg text-stone-400 hover:bg-stone-200 hover:text-stone-600 flex items-center justify-center text-sm transition-colors select-none">↑</button>

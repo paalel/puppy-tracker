@@ -13,7 +13,7 @@ func Get(db *sql.DB) (*Config, error) {
 	}
 	defer rows.Close()
 
-	c := &Config{PuppyName: "Nova", AwakeMinutes: 40, NapMinutes: 90, WindDownMinutes: 25}
+	c := &Config{PuppyName: "Nova", AwakeMinutes: 40, NapMinutes: 90, WindDownMinutes: 25, FirstWakeTime: "09:00"}
 	for rows.Next() {
 		var k, v string
 		if err := rows.Scan(&k, &v); err != nil {
@@ -40,6 +40,10 @@ func Get(db *sql.DB) (*Config, error) {
 			if t, err := time.Parse("2006-01-02", v); err == nil {
 				c.Birthdate = &t
 			}
+		case "first_wake_time":
+			if v != "" {
+				c.FirstWakeTime = v
+			}
 		}
 	}
 	return c, rows.Err()
@@ -56,6 +60,7 @@ func Save(db *sql.DB, c *Config) error {
 		{"awake_minutes", strconv.Itoa(c.AwakeMinutes)},
 		{"nap_minutes", strconv.Itoa(c.NapMinutes)},
 		{"wind_down_minutes", strconv.Itoa(c.WindDownMinutes)},
+		{"first_wake_time", c.FirstWakeTime},
 	}
 	for _, kv := range pairs {
 		_, err := db.Exec(

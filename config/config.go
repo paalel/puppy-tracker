@@ -8,4 +8,5 @@ type Config struct {
 	AwakeMinutes    int
 	NapMinutes      int
 	WindDownMinutes int
+	FirstWakeTime   string // "HH:MM", local time
 }
