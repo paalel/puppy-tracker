@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 const cookieName = "camera_auth"
@@ -103,6 +104,10 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	if !h.hub.online() {
+		http.Error(w, "camera offline", http.StatusServiceUnavailable)
+		return
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -115,16 +120,22 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	ch := h.hub.subscribe()
 	defer h.hub.unsubscribe(ch)
 
+	timeout := time.NewTicker(10 * time.Second)
+	defer timeout.Stop()
+
 	for {
 		select {
 		case frame, ok := <-ch:
 			if !ok {
 				return
 			}
+			timeout.Reset(10 * time.Second)
 			fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(frame))
 			w.Write(frame)
 			fmt.Fprint(w, "\r\n")
 			flusher.Flush()
+		case <-timeout.C:
+			return // no frame for 10 s — close so browser onerror fires and retries
 		case <-r.Context().Done():
 			return
 		}
@@ -139,8 +150,12 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	h.hub.piConnected.Add(1)
 	log.Println("camera: Pi connected")
-	defer log.Println("camera: Pi disconnected")
+	defer func() {
+		h.hub.piConnected.Add(-1)
+		log.Println("camera: Pi disconnected")
+	}()
 
 	var sizeBuf [4]byte
 	for {

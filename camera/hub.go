@@ -1,16 +1,22 @@
 package camera
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 // hub broadcasts JPEG frames from the Pi to all active browser streams.
 type hub struct {
-	mu   sync.RWMutex
-	subs map[chan []byte]struct{}
+	mu          sync.RWMutex
+	subs        map[chan []byte]struct{}
+	piConnected atomic.Int32
 }
 
 func newHub() *hub {
 	return &hub{subs: make(map[chan []byte]struct{})}
 }
+
+func (h *hub) online() bool { return h.piConnected.Load() > 0 }
 
 func (h *hub) publish(frame []byte) {
 	h.mu.RLock()
