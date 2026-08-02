@@ -43,6 +43,31 @@
 </div>
 {{end}}
 
+{{define "nav"}}
+{{/* . is the active page name: "home", "camera", "stats", "settings" */}}
+<nav class="fixed bottom-0 inset-x-0 bg-white border-t border-stone-100 z-40"
+     style="padding-bottom: env(safe-area-inset-bottom)">
+    <div class="max-w-md mx-auto flex">
+        <a href="/" class="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors {{if eq . "home"}}text-indigo-600{{else}}text-stone-400{{end}}">
+            <span class="text-lg leading-none">⌂</span>
+            <span class="text-[10px] font-medium">Home</span>
+        </a>
+        <a href="/camera" class="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors {{if eq . "camera"}}text-indigo-600{{else}}text-stone-400{{end}}">
+            <span class="text-lg leading-none">◎</span>
+            <span class="text-[10px] font-medium">Camera</span>
+        </a>
+        <a href="/stats" class="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors {{if eq . "stats"}}text-indigo-600{{else}}text-stone-400{{end}}">
+            <span class="text-lg leading-none">◈</span>
+            <span class="text-[10px] font-medium">Stats</span>
+        </a>
+        <a href="/settings" class="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors {{if eq . "settings"}}text-indigo-600{{else}}text-stone-400{{end}}">
+            <span class="text-lg leading-none">⚙</span>
+            <span class="text-[10px] font-medium">Settings</span>
+        </a>
+    </div>
+</nav>
+{{end}}
+
 {{define "undo-phase"}}{{end}}
 
 {{define "training-quality"}}

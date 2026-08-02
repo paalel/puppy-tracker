@@ -9,14 +9,11 @@
     {{template "styles" .}}
 </head>
 <body class="text-stone-800 min-h-screen">
-    <div class="max-w-md mx-auto px-4 py-6 pb-12">
+    <div class="max-w-md mx-auto px-4 py-6 pb-24">
 
-        <header class="flex items-center justify-between mb-6">
-            <div>
-                <h1 class="text-lg font-semibold tracking-tight text-stone-800">Stats</h1>
-                <p class="text-xs text-stone-400">{{.Config.PuppyName}} · target {{.Config.AwakeMinutes}}m awake · {{.Config.NapMinutes}}m nap</p>
-            </div>
-            <a href="/" class="text-sm text-stone-400 hover:text-stone-600 transition-colors">← Back</a>
+        <header class="mb-6">
+            <h1 class="text-lg font-semibold tracking-tight text-stone-800">Stats</h1>
+            <p class="text-xs text-stone-400">{{.Config.PuppyName}} · target {{.Config.AwakeMinutes}}m awake · {{.Config.NapMinutes}}m nap</p>
         </header>
 
         {{/* ── Tabs ───────────────────────────────────────────────────────────── */}}
@@ -341,6 +338,7 @@
         {{end}}
 
     </div>
+    {{template "nav" "stats"}}
 </body>
 </html>
 {{end}}

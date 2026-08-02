@@ -15,17 +15,11 @@
     {{template "styles" .}}
 </head>
 <body class="text-stone-800 min-h-screen">
-    <div class="max-w-md mx-auto px-4 py-6 pb-12">
+    <div class="max-w-md mx-auto px-4 py-6 pb-24">
 
-        <header class="flex items-center justify-between mb-5">
-            <div>
-                <h1 class="text-lg font-semibold tracking-tight text-stone-800">Puppy Routine Tracker 🦆</h1>
-                <p class="text-xs text-stone-400">{{.Config.PuppyName}}{{if .Config.Birthdate}} · {{ageWeeks .Config.Birthdate}}w{{end}}</p>
-            </div>
-            <div class="flex items-center gap-1">
-                <a href="/stats" title="Stats" class="w-8 h-8 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors text-base">◈</a>
-                <a href="/settings" title="Settings" class="w-8 h-8 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors text-base">⚙</a>
-            </div>
+        <header class="mb-5">
+            <h1 class="text-lg font-semibold tracking-tight text-stone-800">Puppy Routine Tracker 🦆</h1>
+            <p class="text-xs text-stone-400">{{.Config.PuppyName}}{{if .Config.Birthdate}} · {{ageWeeks .Config.Birthdate}}w{{end}}</p>
         </header>
 
         {{if .IsLocal}}
@@ -58,6 +52,7 @@
         {{end}}
 
     </div>
+    {{template "nav" "home"}}
     <div id="toast-container" class="fixed bottom-6 inset-x-4 flex flex-col items-center gap-2 z-50 pointer-events-none"></div>
     <script>
     // Scroll preservation across HTMX swaps.
