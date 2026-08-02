@@ -47,13 +47,24 @@
     <script>
     var img = document.getElementById('stream');
     var offline = document.getElementById('offline');
+
+    function reload() {
+        img.src = '/camera/stream?t=' + Date.now();
+    }
+
     img.onerror = function() {
         offline.classList.remove('hidden');
-        setTimeout(function() {
-            img.src = '/camera/stream?t=' + Date.now();
-        }, 5000);
+        setTimeout(reload, 5000);
     };
     img.onload = function() { offline.classList.add('hidden'); };
+
+    // Reconnect after navigating back (covers both normal nav and bfcache restore).
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') { reload(); }
+    });
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted) { reload(); }
+    });
     </script>
 </body>
 </html>
