@@ -36,6 +36,7 @@ def frames():
             "rpicam-vid",
             "--codec", "mjpeg",
             "--inline",           # embed SPS/PPS in every frame
+            "--mode", "2304:1296:12:P",  # full sensor readout → wider FoV
             "--width", "640",
             "--height", "480",
             "--framerate", "15",
