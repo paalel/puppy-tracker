@@ -1,11 +1,24 @@
 APP ?= $(FLY_APP)
+PI_HOST ?= $(PUPPY_PI_HOST)
 DB_REMOTE = /data/puppy.db
 DB_LOCAL = ./puppy.db
 
-.PHONY: require-app deploy db-pull db-backup db-restore
+.PHONY: require-app require-pi deploy deploy-pi db-pull db-backup db-restore
 
 require-app:
 	@test -n "$(APP)" || (echo "Error: FLY_APP env var is not set."; exit 1)
+
+require-pi:
+	@test -n "$(PI_HOST)" || (echo "Error: PUPPY_PI_HOST env var is not set (e.g. pi@192.168.1.x)."; exit 1)
+	@test -n "$(CAMERA_TOKEN)" || (echo "Error: CAMERA_TOKEN env var is not set."; exit 1)
+	@test -n "$(PUPPY_SERVER)" || (echo "Error: PUPPY_SERVER env var is not set."; exit 1)
+
+deploy-pi: require-pi
+	@echo "Copying stream.py to $(PI_HOST)..."
+	scp pi/stream.py $(PI_HOST):/home/paalel/stream.py
+	@echo "Restarting stream on Pi..."
+	ssh $(PI_HOST) 'pkill -f stream.py; CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) nohup python3 /home/paalel/stream.py >> /home/paalel/stream.log 2>&1 &'
+	@echo "Done."
 
 deploy: require-app
 	@echo "Running tests..."

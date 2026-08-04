@@ -40,7 +40,7 @@
 </head>
 <body class="bg-stone-950 min-h-screen">
     <div class="max-w-md mx-auto px-4 pt-6 pb-24">
-        <img id="stream" src="/camera/stream" class="w-full rounded-xl" alt="">
+        <img id="stream" class="w-full rounded-xl" alt="">
         <p id="offline" class="hidden text-center text-stone-500 text-sm mt-6">Camera offline — retrying…</p>
     </div>
     {{template "nav" "camera"}}
@@ -51,6 +51,8 @@
     function reload() {
         img.src = '/camera/stream?t=' + Date.now();
     }
+
+    reload();
 
     img.onerror = function() {
         offline.classList.remove('hidden');
