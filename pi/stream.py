@@ -34,8 +34,8 @@ if not TOKEN or not SERVER:
 # Toller fur HSV range (OpenCV scale: H 0-179, S/V 0-255).
 _HUE_LOW  = 10
 _HUE_HIGH = 25
-_SAT_LOW  = 100
-_VAL_LOW  = 50
+_SAT_LOW  = 80
+_VAL_LOW  = 35
 _MIN_FRAC = 0.03  # 3 % of pixels must match to count as present
 _DETECT_INTERVAL = 10  # seconds between detection runs
 
