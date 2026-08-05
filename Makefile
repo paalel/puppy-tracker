@@ -1,5 +1,6 @@
 APP ?= $(FLY_APP)
 PI_HOST ?= $(PUPPY_PI_HOST)
+PUPPY_SERVER ?= https://$(APP).fly.dev
 DB_REMOTE = /data/puppy.db
 DB_LOCAL = ./puppy.db
 
@@ -17,7 +18,7 @@ deploy-pi: require-pi
 	@echo "Copying stream.py to $(PI_HOST)..."
 	scp pi/stream.py $(PI_HOST):/home/paalel/stream.py
 	@echo "Restarting stream on Pi..."
-	ssh $(PI_HOST) 'pkill -f stream.py; CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) nohup python3 /home/paalel/stream.py >> /home/paalel/stream.log 2>&1 &'
+	@{ echo 'pkill -f stream.py || true'; echo 'CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) nohup python3 /home/paalel/stream.py >> /home/paalel/stream.log 2>&1 < /dev/null &'; } | ssh $(PI_HOST) bash
 	@echo "Done."
 
 deploy: require-app

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -35,6 +36,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /camera", h.handleLogin)
 	mux.HandleFunc("GET /camera/stream", h.handleStream)
 	mux.HandleFunc("PUT /camera/push", h.handlePush)
+	mux.HandleFunc("POST /camera/presence", h.handlePresenceUpdate)
+	mux.HandleFunc("GET /api/camera/presence", h.handlePresenceGet)
 }
 
 func (h *Handler) validToken(s string) bool {
@@ -140,6 +143,35 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// handlePresenceUpdate receives puppy presence status from the Pi.
+func (h *Handler) handlePresenceUpdate(w http.ResponseWriter, r *http.Request) {
+	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !h.validToken(auth) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		Present bool `json:"present"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	h.hub.setPresence(body.Present)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handlePresenceGet returns the latest presence status as JSON.
+func (h *Handler) handlePresenceGet(w http.ResponseWriter, r *http.Request) {
+	s := h.hub.getPresence()
+	stale := s.UpdatedAt.IsZero() || time.Since(s.UpdatedAt) > 60*time.Second
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"present": s.Present,
+		"stale":   stale,
+	})
 }
 
 // handlePush receives length-prefixed JPEG frames from the Pi via HTTP PUT.

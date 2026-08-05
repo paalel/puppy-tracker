@@ -3,17 +3,37 @@ package camera
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 )
+
+type presenceStatus struct {
+	Present   bool
+	UpdatedAt time.Time
+}
 
 // hub broadcasts JPEG frames from the Pi to all active browser streams.
 type hub struct {
 	mu          sync.RWMutex
 	subs        map[chan []byte]struct{}
 	piConnected atomic.Int32
+	presenceMu  sync.RWMutex
+	presence    presenceStatus
 }
 
 func newHub() *hub {
 	return &hub{subs: make(map[chan []byte]struct{})}
+}
+
+func (h *hub) setPresence(present bool) {
+	h.presenceMu.Lock()
+	h.presence = presenceStatus{Present: present, UpdatedAt: time.Now()}
+	h.presenceMu.Unlock()
+}
+
+func (h *hub) getPresence() presenceStatus {
+	h.presenceMu.RLock()
+	defer h.presenceMu.RUnlock()
+	return h.presence
 }
 
 func (h *hub) online() bool { return h.piConnected.Load() > 0 }
