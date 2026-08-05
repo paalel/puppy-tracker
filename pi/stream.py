@@ -37,6 +37,7 @@ _HUE_HIGH = 30
 _SAT_LOW  = 60
 _VAL_LOW  = 25
 _MIN_FRAC = 0.01  # 1 % of pixels must match to count as present
+_MAX_FRAC = 0.20  # above 20 % means the whole room looks like her — false positive
 _DETECT_INTERVAL = 10  # seconds between detection runs
 
 try:
@@ -63,8 +64,8 @@ def _detect_presence(jpeg_bytes):
         upper = np.array([_HUE_HIGH, 255,       255     ])
         mask = cv2.inRange(hsv, lower, upper)
         frac = np.count_nonzero(mask) / mask.size
-        print(f"Detection: {frac:.3%} matching pixels (threshold {_MIN_FRAC:.3%})", flush=True)
-        return frac >= _MIN_FRAC
+        print(f"Detection: {frac:.3%} matching pixels (threshold {_MIN_FRAC:.3%}–{_MAX_FRAC:.3%})", flush=True)
+        return _MIN_FRAC <= frac <= _MAX_FRAC
     except Exception as exc:
         print(f"Detection error: {exc}", flush=True)
         return None
