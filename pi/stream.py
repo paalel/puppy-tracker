@@ -32,11 +32,11 @@ if not TOKEN or not SERVER:
     sys.exit(1)
 
 # Toller fur HSV range (OpenCV scale: H 0-179, S/V 0-255).
-_HUE_LOW  = 10
-_HUE_HIGH = 25
-_SAT_LOW  = 80
-_VAL_LOW  = 35
-_MIN_FRAC = 0.03  # 3 % of pixels must match to count as present
+_HUE_LOW  = 8
+_HUE_HIGH = 30
+_SAT_LOW  = 60
+_VAL_LOW  = 25
+_MIN_FRAC = 0.01  # 1 % of pixels must match to count as present
 _DETECT_INTERVAL = 10  # seconds between detection runs
 
 try:
@@ -63,6 +63,7 @@ def _detect_presence(jpeg_bytes):
         upper = np.array([_HUE_HIGH, 255,       255     ])
         mask = cv2.inRange(hsv, lower, upper)
         frac = np.count_nonzero(mask) / mask.size
+        print(f"Detection: {frac:.3%} matching pixels (threshold {_MIN_FRAC:.3%})", flush=True)
         return frac >= _MIN_FRAC
     except Exception as exc:
         print(f"Detection error: {exc}", flush=True)
