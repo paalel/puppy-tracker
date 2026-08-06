@@ -28,6 +28,22 @@
 {{end}}
 
 
+{{define "pen-toggle"}}
+<div id="pen-toggle" class="mt-4">
+    <form hx-post="/camera/pen/toggle" hx-target="#pen-toggle" hx-swap="outerHTML">
+        {{if .InPen}}
+        <button type="submit" class="w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:bg-emerald-700 transition-colors select-none">
+            In pen{{if .Since}} · {{.Since}}{{end}} · tap when she leaves
+        </button>
+        {{else}}
+        <button type="submit" class="w-full py-3 rounded-xl bg-stone-700 text-stone-300 text-sm font-semibold active:bg-stone-600 transition-colors select-none">
+            Put her in the pen
+        </button>
+        {{end}}
+    </form>
+</div>
+{{end}}
+
 {{define "camera-page"}}
 <!DOCTYPE html>
 <html lang="en">
@@ -36,12 +52,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Camera · Puppy Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
     {{template "styles" .}}
 </head>
 <body class="bg-stone-950 min-h-screen">
     <div class="max-w-md mx-auto px-4 pt-6 pb-24">
         <img id="stream" class="w-full rounded-xl" alt="">
         <p id="offline" class="hidden text-center text-stone-500 text-sm mt-6">Camera offline — retrying…</p>
+        {{template "pen-toggle" .PenStatus}}
     </div>
     {{template "nav" "camera"}}
     <script>

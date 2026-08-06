@@ -100,7 +100,7 @@ func main() {
 	routine.New(db, tmpl).RegisterRoutes(mux)
 	stats.New(db, tmpl).RegisterRoutes(mux)
 	config.New(db, tmpl).RegisterRoutes(mux)
-	camera.New(tmpl).RegisterRoutes(mux)
+	camera.New(db, tmpl).RegisterRoutes(mux)
 
 	log.Println("Puppy Routine Tracker listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))

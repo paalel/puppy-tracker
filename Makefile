@@ -4,7 +4,7 @@ PUPPY_SERVER ?= https://$(APP).fly.dev
 DB_REMOTE = /data/puppy.db
 DB_LOCAL = ./puppy.db
 
-.PHONY: require-app require-pi deploy deploy-pi db-pull db-backup db-restore
+.PHONY: require-app require-pi deploy deploy-pi get-samples db-pull db-backup db-restore
 
 require-app:
 	@test -n "$(APP)" || (echo "Error: FLY_APP env var is not set."; exit 1)
@@ -26,6 +26,11 @@ deploy: require-app
 	@go test ./... || (echo "Tests failed, aborting deploy."; exit 1)
 	@echo "Deploying to Fly.io..."
 	fly deploy --app $(APP)
+
+get-samples: require-pi
+	@mkdir -p samples
+	scp -r $(PI_HOST):/home/paalel/samples/ ./samples/
+	@echo "Samples saved to ./samples/ — label filenames with -in or -out then commit."
 
 db-pull: require-app
 	@echo "Downloading prod database..."
