@@ -41,7 +41,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /camera/push", h.handlePush)
 	mux.HandleFunc("POST /camera/presence", h.handlePresenceUpdate)
 	mux.HandleFunc("GET /api/camera/presence", h.handlePresenceGet)
-	mux.HandleFunc("POST /camera/pen/toggle", h.handlePenToggle)
 }
 
 func (h *Handler) validToken(s string) bool {
@@ -63,10 +62,6 @@ type loginData struct {
 	Error bool
 }
 
-type cameraPageData struct {
-	PenStatus PenToggleData
-}
-
 func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 	var (
 		name string
@@ -74,7 +69,6 @@ func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 	)
 	if h.authenticated(r) {
 		name = "camera-page"
-		data = cameraPageData{PenStatus: h.penStatus()}
 	} else {
 		name = "camera-login"
 		data = &loginData{Error: r.URL.Query().Get("error") == "1"}
@@ -181,55 +175,6 @@ func (h *Handler) handlePresenceGet(w http.ResponseWriter, r *http.Request) {
 		"present": s.Present,
 		"stale":   stale,
 	})
-}
-
-// PenToggleData is passed to the pen-toggle template fragment.
-type PenToggleData struct {
-	InPen bool
-	Since string
-}
-
-func (h *Handler) penStatus() PenToggleData {
-	var startedAt time.Time
-	err := h.db.QueryRow(`SELECT started_at FROM pen_sessions WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1`).Scan(&startedAt)
-	if err != nil {
-		return PenToggleData{}
-	}
-	return PenToggleData{InPen: true, Since: fmtPenDuration(time.Since(startedAt))}
-}
-
-func fmtPenDuration(d time.Duration) string {
-	d = d.Round(time.Minute)
-	if d < time.Minute {
-		return "just now"
-	}
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
-}
-
-func (h *Handler) handlePenToggle(w http.ResponseWriter, r *http.Request) {
-	if !h.authenticated(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	status := h.penStatus()
-	if status.InPen {
-		h.db.Exec(`UPDATE pen_sessions SET ended_at = ? WHERE ended_at IS NULL`, time.Now().UTC())
-	} else {
-		h.db.Exec(`INSERT INTO pen_sessions (started_at) VALUES (?)`, time.Now().UTC())
-	}
-	data := h.penStatus()
-	var buf bytes.Buffer
-	if err := h.tmpl.ExecuteTemplate(&buf, "pen-toggle", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
 }
 
 // handlePush receives length-prefixed JPEG frames from the Pi via HTTP PUT.

@@ -13,12 +13,13 @@ require-pi:
 	@test -n "$(PI_HOST)" || (echo "Error: PUPPY_PI_HOST env var is not set (e.g. pi@192.168.1.x)."; exit 1)
 	@test -n "$(CAMERA_TOKEN)" || (echo "Error: CAMERA_TOKEN env var is not set."; exit 1)
 	@test -n "$(PUPPY_SERVER)" || (echo "Error: PUPPY_SERVER env var is not set."; exit 1)
+	@test -n "$(TAPO_URL)" || (echo "Error: TAPO_URL env var is not set."; exit 1)
 
 deploy-pi: require-pi
 	@echo "Copying stream.py to $(PI_HOST)..."
 	scp pi/stream.py $(PI_HOST):/home/paalel/stream.py
 	@echo "Restarting stream on Pi..."
-	@{ echo 'pkill -f stream.py || true'; echo 'CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) nohup python3 /home/paalel/stream.py >> /home/paalel/stream.log 2>&1 < /dev/null &'; } | ssh $(PI_HOST) bash
+	@{ echo 'pkill -f stream.py || true'; echo 'CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) TAPO_URL=$(TAPO_URL) nohup python3 /home/paalel/stream.py >> /home/paalel/stream.log 2>&1 < /dev/null &'; } | ssh $(PI_HOST) bash
 	@echo "Done."
 
 deploy: require-app
@@ -29,8 +30,8 @@ deploy: require-app
 
 get-samples: require-pi
 	@mkdir -p samples
-	scp -r $(PI_HOST):/home/paalel/samples/ ./samples/
-	@echo "Samples saved to ./samples/ — label filenames with -in or -out then commit."
+	rsync -avz --progress $(PI_HOST):/home/paalel/samples/ ./samples/
+	@echo "Samples saved to ./samples/ — run 'python3 pi/label_samples.py' to label."
 
 db-pull: require-app
 	@echo "Downloading prod database..."

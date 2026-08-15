@@ -2,5 +2,6 @@
 *.db-wal
 *.db-shm
 puppy
+samples/
 
 .envrc

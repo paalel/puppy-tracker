@@ -29,7 +29,12 @@ sessions = db.execute(
 
 
 def parse_dt(s):
-    return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
+    # Go stores times as "2026-08-06 13:53:18.796957934 +0000 UTC" — strip to microseconds.
+    date_part, time_part = s.split(" ")[:2]
+    time_part = time_part[:15]  # truncate nanoseconds to microseconds
+    return datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M:%S.%f").replace(
+        tzinfo=timezone.utc
+    )
 
 
 def in_pen_at(dt):
