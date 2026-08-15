@@ -4,23 +4,68 @@ PUPPY_SERVER ?= https://$(APP).fly.dev
 DB_REMOTE = /data/puppy.db
 DB_LOCAL = ./puppy.db
 
-.PHONY: require-app require-pi deploy deploy-pi get-samples db-pull db-backup db-restore
+.PHONY: require-app require-pi deploy deploy-pi deploy-pi-pen deploy-pi-crate setup-pi-boot get-samples db-pull db-backup db-restore
 
 require-app:
 	@test -n "$(APP)" || (echo "Error: FLY_APP env var is not set."; exit 1)
 
 require-pi:
-	@test -n "$(PI_HOST)" || (echo "Error: PUPPY_PI_HOST env var is not set (e.g. pi@192.168.1.x)."; exit 1)
+	@test -n "$(PI_HOST)"      || (echo "Error: PUPPY_PI_HOST env var is not set (e.g. paalel@kgb.local)."; exit 1)
 	@test -n "$(CAMERA_TOKEN)" || (echo "Error: CAMERA_TOKEN env var is not set."; exit 1)
 	@test -n "$(PUPPY_SERVER)" || (echo "Error: PUPPY_SERVER env var is not set."; exit 1)
-	@test -n "$(TAPO_URL)" || (echo "Error: TAPO_URL env var is not set."; exit 1)
 
-deploy-pi: require-pi
+# deploy-pi-pen: deploy stream.py for the pen camera.
+deploy-pi-pen: require-pi
+	@test -n "$(TAPO_PEN_URL)" || (echo "Error: TAPO_PEN_URL env var is not set."; exit 1)
 	@echo "Copying stream.py to $(PI_HOST)..."
 	scp pi/stream.py $(PI_HOST):/home/paalel/stream.py
-	@echo "Restarting stream on Pi..."
-	@{ echo 'pkill -f stream.py || true'; echo 'CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) TAPO_URL=$(TAPO_URL) nohup python3 /home/paalel/stream.py >> /home/paalel/stream.log 2>&1 < /dev/null &'; } | ssh $(PI_HOST) bash
-	@echo "Done."
+	@echo "Restarting pen camera stream on Pi..."
+	@{ \
+	  echo 'pkill -f "/home/paalel/stream.py" || true'; \
+	  echo 'sleep 1'; \
+	  echo 'pkill -f "camera/pen/hls" || true'; \
+	  echo 'sleep 1'; \
+	  echo 'CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) TAPO_URL=$(TAPO_PEN_URL) CAMERA_ID=pen nohup python3 /home/paalel/stream.py >> /home/paalel/stream-pen.log 2>&1 < /dev/null &'; \
+	} | ssh $(PI_HOST) bash
+	@echo "Done. Tail logs: ssh $(PI_HOST) tail -f /home/paalel/stream-pen.log"
+
+# deploy-pi-crate: deploy stream.py for the crate camera.
+deploy-pi-crate: require-pi
+	@test -n "$(TAPO_CRATE_URL)" || (echo "Error: TAPO_CRATE_URL env var is not set."; exit 1)
+	@echo "Copying stream.py to $(PI_HOST)..."
+	scp pi/stream.py $(PI_HOST):/home/paalel/stream-crate.py
+	@echo "Restarting crate camera stream on Pi..."
+	@{ \
+	  echo 'pkill -f "stream-crate.py" || true'; \
+	  echo 'sleep 1'; \
+	  echo 'pkill -f "camera/crate/hls" || true'; \
+	  echo 'sleep 1'; \
+	  echo 'CAMERA_TOKEN=$(CAMERA_TOKEN) PUPPY_SERVER=$(PUPPY_SERVER) TAPO_URL=$(TAPO_CRATE_URL) CAMERA_ID=crate nohup python3 /home/paalel/stream-crate.py >> /home/paalel/stream-crate.log 2>&1 < /dev/null &'; \
+	} | ssh $(PI_HOST) bash
+	@echo "Done. Tail logs: ssh $(PI_HOST) tail -f /home/paalel/stream-crate.log"
+
+# deploy-pi: alias for deploy-pi-pen (backwards-compat).
+deploy-pi: deploy-pi-pen
+
+# setup-pi-boot: write env file + startup script, install crontab @reboot entry.
+# Run this once, then reboot the Pi. Scripts must already be deployed.
+setup-pi-boot: require-pi
+	@test -n "$(TAPO_PEN_URL)"   || (echo "Error: TAPO_PEN_URL env var is not set."; exit 1)
+	@test -n "$(TAPO_CRATE_URL)" || (echo "Error: TAPO_CRATE_URL env var is not set."; exit 1)
+	@echo "Writing /home/paalel/.camera-env to $(PI_HOST)..."
+	@{ \
+	  echo "echo 'CAMERA_TOKEN=$(CAMERA_TOKEN)' > /home/paalel/.camera-env"; \
+	  echo "echo 'PUPPY_SERVER=$(PUPPY_SERVER)' >> /home/paalel/.camera-env"; \
+	  echo "echo 'TAPO_PEN_URL=$(TAPO_PEN_URL)' >> /home/paalel/.camera-env"; \
+	  echo "echo 'TAPO_CRATE_URL=$(TAPO_CRATE_URL)' >> /home/paalel/.camera-env"; \
+	  echo "chmod 600 /home/paalel/.camera-env"; \
+	} | ssh $(PI_HOST) bash
+	@echo "Copying start-cameras.sh..."
+	scp pi/start-cameras.sh $(PI_HOST):/home/paalel/start-cameras.sh
+	ssh $(PI_HOST) chmod +x /home/paalel/start-cameras.sh
+	@echo "Installing crontab @reboot entry..."
+	@ssh $(PI_HOST) "(crontab -l 2>/dev/null | grep -v 'stream.py' | grep -v 'start-cameras.sh'; echo '@reboot /home/paalel/start-cameras.sh') | crontab -"
+	@echo "Done. Reboot with: ssh $(PI_HOST) sudo reboot"
 
 deploy: require-app
 	@echo "Running tests..."

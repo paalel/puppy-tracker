@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -37,10 +35,10 @@ func New(db *sql.DB, tmpl *template.Template) *Handler {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /camera", h.handlePage)
 	mux.HandleFunc("POST /camera", h.handleLogin)
-	mux.HandleFunc("GET /camera/stream", h.handleStream)
-	mux.HandleFunc("PUT /camera/push", h.handlePush)
-	mux.HandleFunc("POST /camera/presence", h.handlePresenceUpdate)
-	mux.HandleFunc("GET /api/camera/presence", h.handlePresenceGet)
+	mux.HandleFunc("GET /camera/{id}/hls/{file}", h.handleHLSGet)
+	mux.HandleFunc("PUT /camera/{id}/hls/{file}", h.handleHLSPut)
+	mux.HandleFunc("POST /camera/{id}/presence", h.handlePresenceUpdate)
+	mux.HandleFunc("GET /api/camera/{id}/presence", h.handlePresenceGet)
 }
 
 func (h *Handler) validToken(s string) bool {
@@ -95,7 +93,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    h.token,
-		Path:     "/camera",
+		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   365 * 24 * 60 * 60,
@@ -104,48 +102,44 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/camera", http.StatusSeeOther)
 }
 
-// handleStream serves a multipart MJPEG stream to the browser.
-func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
+// handleHLSPut receives HLS playlist and segments from the Pi via FFmpeg -method PUT.
+func (h *Handler) handleHLSPut(w http.ResponseWriter, r *http.Request) {
+	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !h.validToken(auth) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	file := r.PathValue("file")
+	data, err := io.ReadAll(io.LimitReader(r.Body, 20<<20))
+	if err != nil {
+		http.Error(w, "read error", http.StatusInternalServerError)
+		return
+	}
+	h.hub.camera(id).put(file, data)
+	w.WriteHeader(http.StatusCreated)
+}
+
+// handleHLSGet serves HLS playlist and segments to the browser (cookie-authenticated).
+func (h *Handler) handleHLSGet(w http.ResponseWriter, r *http.Request) {
 	if !h.authenticated(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if !h.hub.online() {
-		http.Error(w, "camera offline", http.StatusServiceUnavailable)
-		return
-	}
-	flusher, ok := w.(http.Flusher)
+	id := r.PathValue("id")
+	file := r.PathValue("file")
+	data, ok := h.hub.camera(id).get(file)
 	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no") // disable nginx/fly proxy buffering
-
-	ch := h.hub.subscribe()
-	defer h.hub.unsubscribe(ch)
-
-	timeout := time.NewTicker(10 * time.Second)
-	defer timeout.Stop()
-
-	for {
-		select {
-		case frame, ok := <-ch:
-			if !ok {
-				return
-			}
-			timeout.Reset(10 * time.Second)
-			fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(frame))
-			w.Write(frame)
-			fmt.Fprint(w, "\r\n")
-			flusher.Flush()
-		case <-timeout.C:
-			return // no frame for 10 s — close so browser onerror fires and retries
-		case <-r.Context().Done():
-			return
-		}
+	if strings.HasSuffix(file, ".m3u8") {
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	} else {
+		w.Header().Set("Content-Type", "video/mp2t")
 	}
+	w.Write(data)
 }
 
 // handlePresenceUpdate receives puppy presence status from the Pi.
@@ -155,6 +149,7 @@ func (h *Handler) handlePresenceUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	id := r.PathValue("id")
 	var body struct {
 		Present bool `json:"present"`
 	}
@@ -162,50 +157,18 @@ func (h *Handler) handlePresenceUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	h.hub.setPresence(body.Present)
+	h.hub.setPresence(id, body.Present)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // handlePresenceGet returns the latest presence status as JSON.
 func (h *Handler) handlePresenceGet(w http.ResponseWriter, r *http.Request) {
-	s := h.hub.getPresence()
+	id := r.PathValue("id")
+	s := h.hub.getPresence(id)
 	stale := s.UpdatedAt.IsZero() || time.Since(s.UpdatedAt) > 30*time.Second
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"present": s.Present,
 		"stale":   stale,
 	})
-}
-
-// handlePush receives length-prefixed JPEG frames from the Pi via HTTP PUT.
-// The Pi authenticates with "Authorization: Bearer <token>".
-func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
-	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !h.validToken(auth) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	h.hub.piConnected.Add(1)
-	log.Println("camera: Pi connected")
-	defer func() {
-		h.hub.piConnected.Add(-1)
-		log.Println("camera: Pi disconnected")
-	}()
-
-	var sizeBuf [4]byte
-	for {
-		if _, err := io.ReadFull(r.Body, sizeBuf[:]); err != nil {
-			return
-		}
-		n := binary.BigEndian.Uint32(sizeBuf[:])
-		if n == 0 || n > 10<<20 { // sanity: 0 < frame ≤ 10 MB
-			log.Printf("camera: unexpected frame size %d, closing", n)
-			return
-		}
-		frame := make([]byte, n)
-		if _, err := io.ReadFull(r.Body, frame); err != nil {
-			return
-		}
-		h.hub.publish(frame)
-	}
 }

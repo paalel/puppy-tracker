@@ -36,36 +36,123 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Camera · Puppy Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     {{template "styles" .}}
 </head>
-<body class="bg-stone-950 min-h-screen">
-    <div class="max-w-md mx-auto px-4 pt-6 pb-24">
-        <img id="stream" class="w-full rounded-xl" alt="">
-        <p id="offline" class="hidden text-center text-stone-500 text-sm mt-6">Camera offline — retrying…</p>
-    </div>
-    {{template "nav" "camera"}}
-    <script>
-    var img = document.getElementById('stream');
-    var offline = document.getElementById('offline');
+<!--
+  Layout (all fixed, no scroll):
+    ┌─────────────────────────┐  ← top: 0
+    │                         │
+    │         video           │  flex center
+    │                         │
+    ├─────────────────────────┤  ← bottom: nav-h + 44px
+    │  🔇  [Pen] [Crate]      │  44px controls bar
+    ├─────────────────────────┤  ← bottom: nav-h
+    │         nav             │  nav-h = 56px + safe-area-inset-bottom
+    └─────────────────────────┘  ← bottom: 0
+-->
+<body class="bg-stone-950 overflow-hidden" style="height:100dvh;">
 
-    function reload() {
-        img.src = '/camera/stream?t=' + Date.now();
+    <!-- Video area: fills space above controls -->
+    <div id="video-wrap"
+         class="fixed inset-x-0 top-0 overflow-hidden bg-black flex items-center justify-center"
+         style="bottom:calc(env(safe-area-inset-bottom,0px) + 100px);">
+        <!--
+          Before rotation: wide element (177.78vw × 100vw), landscape 16:9.
+          After rotate(90deg): visual size is 100vw wide × 177.78vw tall — portrait.
+          overflow:hidden on parent clips whatever extends beyond the available height.
+        -->
+        <video id="stream"
+               style="width:177.78vw;height:100vw;flex-shrink:0;transform:rotate(90deg);"
+               autoplay muted playsinline></video>
+        <div id="offline" class="hidden absolute inset-0 flex items-center justify-center pointer-events-none">
+            <p class="text-stone-500 text-sm">Camera offline — retrying…</p>
+        </div>
+    </div>
+
+    <!-- Controls: fixed bar sitting above the nav -->
+    <div class="fixed inset-x-0 flex items-center gap-3 px-4 bg-stone-950 z-30"
+         style="bottom:calc(env(safe-area-inset-bottom,0px) + 56px);height:44px;">
+        <button id="mute-btn" onclick="toggleMute()"
+            class="px-3 py-1.5 rounded-lg bg-stone-800 text-stone-400 text-xs font-medium select-none">
+            🔇 Sound off
+        </button>
+        <div class="flex gap-2 ml-auto">
+            <button id="btn-pen" onclick="loadCamera('pen')"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white select-none">Pen</button>
+            <button id="btn-crate" onclick="loadCamera('crate')"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-stone-400 select-none">Crate</button>
+        </div>
+    </div>
+
+    {{template "nav" "camera"}}
+
+    <script>
+    var video   = document.getElementById('stream');
+    var offline = document.getElementById('offline');
+    var muteBtn = document.getElementById('mute-btn');
+    var hls;
+    var currentCamera = 'pen';
+    var retryTimer;
+
+    function loadCamera(id) {
+        currentCamera = id;
+        clearTimeout(retryTimer);
+
+        ['pen', 'crate'].forEach(function(cam) {
+            var btn = document.getElementById('btn-' + cam);
+            btn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium select-none ' +
+                (cam === id ? 'bg-indigo-600 text-white' : 'bg-stone-800 text-stone-400');
+        });
+
+        offline.classList.add('hidden');
+        if (hls) { hls.destroy(); hls = null; }
+
+        var src = '/camera/' + id + '/hls/stream.m3u8';
+
+        if (Hls.isSupported()) {
+            hls = new Hls({ maxBufferLength: 10 });
+            hls.loadSource(src);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() { video.play(); });
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) {
+                    offline.classList.remove('hidden');
+                    retryTimer = setTimeout(function() { loadCamera(currentCamera); }, 5000);
+                }
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = src;
+            video.addEventListener('error', function onErr() {
+                offline.classList.remove('hidden');
+                retryTimer = setTimeout(function() { loadCamera(currentCamera); }, 5000);
+                video.removeEventListener('error', onErr);
+            }, { once: true });
+            video.play();
+        }
     }
 
-    reload();
+    function toggleMute() {
+        video.muted = !video.muted;
+        muteBtn.textContent = video.muted ? '🔇 Sound off' : '🔊 Sound on';
+    }
 
-    img.onerror = function() {
-        offline.classList.remove('hidden');
-        setTimeout(reload, 5000);
-    };
-    img.onload = function() { offline.classList.add('hidden'); };
-
-    // Reconnect after navigating back (covers both normal nav and bfcache restore).
     document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'visible') { reload(); }
+        if (document.visibilityState === 'visible') { loadCamera(currentCamera); }
     });
     window.addEventListener('pageshow', function(e) {
-        if (e.persisted) { reload(); }
+        if (e.persisted) { loadCamera(currentCamera); }
+    });
+
+    // Pick the camera that currently has presence; fall back to pen.
+    Promise.all(['pen', 'crate'].map(function(id) {
+        return fetch('/api/camera/' + id + '/presence')
+            .then(function(r) { return r.json(); })
+            .then(function(d) { return { id: id, active: d.present && !d.stale }; })
+            .catch(function() { return { id: id, active: false }; });
+    })).then(function(results) {
+        var active = results.find(function(r) { return r.active; });
+        loadCamera(active ? active.id : 'pen');
     });
     </script>
 </body>
