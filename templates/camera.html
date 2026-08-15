@@ -39,9 +39,16 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     {{template "styles" .}}
     <style>
-    /* On desktop (hover+fine pointer = mouse), the screen is already landscape
-       so the portrait-lock transform never applies. Show the video at natural
-       size instead of using the portrait-rotation trick. */
+    /* Tailwind Preflight sets `img, video { max-width: 100%; height: auto }` which
+       clamps the video to parent width and kills the rotation-based sizing trick.
+       Override it here with higher specificity (#stream = 1,0,0 vs 0,0,1). */
+    #stream {
+        max-width: none;
+        max-height: none;
+    }
+
+    /* Desktop (hover+fine pointer = mouse): screen is already landscape, no rotation
+       needed. Show the video at natural size filling the available area. */
     @media (hover: hover) and (pointer: fine) {
         #stream {
             width: 100% !important;
@@ -168,7 +175,10 @@
             });
             hls.loadSource(src);
             hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() { video.play(); });
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                var p = video.play();
+                if (p && p.catch) { p.catch(function(err) { log('play() rejected: ' + err.name); }); }
+            });
             hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
                 var s = data.frag.stats;
                 var loadMs = s ? Math.round(s.loading.end - s.loading.start) : '?';
@@ -182,7 +192,14 @@
                 }
                 log('fatal ' + data.type + '/' + data.details);
                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                    hls.startLoad();
+                    if (hasPlayed) {
+                        // Mid-stream blip — resume from current position.
+                        hls.startLoad();
+                    } else {
+                        // Manifest or early segment failed — startLoad() can't re-request
+                        // the manifest, so destroy and retry from scratch after a short delay.
+                        retryTimer = setTimeout(function() { loadCamera(currentCamera); }, 3000);
+                    }
                     return;
                 }
                 if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaErrCount < 2) {
@@ -219,7 +236,12 @@
         if (e.persisted) { loadCamera(currentCamera); }
     });
 
-    // Pick the camera that currently has presence; fall back to pen.
+    // Start loading the default camera immediately — don't wait for the presence fetch.
+    // This keeps us inside the browser's autoplay window and avoids a blank spinner
+    // if the presence requests are slow.
+    loadCamera('pen');
+
+    // In parallel, find which camera has presence and switch if it's different.
     Promise.all(['pen', 'crate'].map(function(id) {
         return fetch('/api/camera/' + id + '/presence')
             .then(function(r) { return r.json(); })
@@ -227,7 +249,8 @@
             .catch(function() { return { id: id, active: false }; });
     })).then(function(results) {
         var active = results.find(function(r) { return r.active; });
-        loadCamera(active ? active.id : 'pen');
+        var best = active ? active.id : 'pen';
+        if (best !== currentCamera) { loadCamera(best); }
     });
     </script>
 </body>
