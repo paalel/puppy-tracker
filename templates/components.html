@@ -4,9 +4,9 @@
         body { background-color: #F7F6F3; }
         * { -webkit-tap-highlight-color: transparent; }
 
-        /* Lock the app to portrait. When the device is rotated to landscape,
-           counter-rotate the root element so content stays upright. */
-        @media screen and (orientation: landscape) {
+        /* Lock the app to portrait on mobile touch devices only.
+           (hover:none) and (pointer:coarse) excludes desktop browsers. */
+        @media screen and (orientation: landscape) and (hover: none) and (pointer: coarse) {
             html {
                 transform: rotate(-90deg) translateX(-100%);
                 transform-origin: top left;

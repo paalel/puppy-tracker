@@ -38,6 +38,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     {{template "styles" .}}
+    <style>
+    /* On desktop (hover+fine pointer = mouse), the screen is already landscape
+       so the portrait-lock transform never applies. Show the video at natural
+       size instead of using the portrait-rotation trick. */
+    @media (hover: hover) and (pointer: fine) {
+        #stream {
+            width: 100% !important;
+            height: 100% !important;
+            transform: none !important;
+            object-fit: contain;
+        }
+    }
+    </style>
 </head>
 <!--
   Layout (all fixed, no scroll):
@@ -56,11 +69,12 @@
     <!-- Video area: fills space above controls -->
     <div id="video-wrap"
          class="fixed inset-x-0 top-0 overflow-hidden bg-black flex items-center justify-center"
-         style="bottom:calc(env(safe-area-inset-bottom,0px) + 100px);">
+         style="bottom:calc(env(safe-area-inset-bottom,0px) + 112px);transform:translateZ(0);">
         <!--
           Before rotation: wide element (177.78vw × 100vw), landscape 16:9.
           After rotate(90deg): visual size is 100vw wide × 177.78vw tall — portrait.
           overflow:hidden on parent clips whatever extends beyond the available height.
+          translateZ(0) promotes to GPU layer so iOS Safari clips rotated children correctly.
         -->
         <video id="stream"
                style="width:177.78vw;height:100vw;flex-shrink:0;transform:rotate(90deg);"
@@ -75,7 +89,7 @@
 
     <!-- Controls: fixed bar sitting above the nav -->
     <div class="fixed inset-x-0 flex items-center gap-3 px-4 bg-stone-950 z-30"
-         style="bottom:calc(env(safe-area-inset-bottom,0px) + 56px);height:44px;">
+         style="bottom:calc(env(safe-area-inset-bottom,0px) + 68px);height:44px;">
         <button id="mute-btn" onclick="toggleMute()"
             class="px-3 py-1.5 rounded-lg bg-stone-800 text-stone-400 text-xs font-medium select-none">
             🔇 Sound off
