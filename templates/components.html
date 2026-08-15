@@ -3,6 +3,21 @@
     @layer base {
         body { background-color: #F7F6F3; }
         * { -webkit-tap-highlight-color: transparent; }
+
+        /* Lock the app to portrait. When the device is rotated to landscape,
+           counter-rotate the root element so content stays upright. */
+        @media screen and (orientation: landscape) {
+            html {
+                transform: rotate(-90deg) translateX(-100%);
+                transform-origin: top left;
+                width: 100vh;
+                height: 100vw;
+                overflow: hidden;
+                position: fixed;
+                top: 0;
+                left: 0;
+            }
+        }
     }
     @layer components {
         .btn-badge {

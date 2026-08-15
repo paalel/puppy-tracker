@@ -44,3 +44,33 @@ func (h *hub) getPresence(id string) presenceStatus {
 	defer h.presenceMu.RUnlock()
 	return h.presence[id]
 }
+
+type cameraStatus struct {
+	hlsStats
+	Presence presenceStatus `json:"presence"`
+}
+
+func (h *hub) status() map[string]cameraStatus {
+	h.camerasMu.Lock()
+	snap := make(map[string]*hlsStore, len(h.cameras))
+	for id, s := range h.cameras {
+		snap[id] = s
+	}
+	h.camerasMu.Unlock()
+
+	h.presenceMu.RLock()
+	presenceSnap := make(map[string]presenceStatus, len(h.presence))
+	for id, p := range h.presence {
+		presenceSnap[id] = p
+	}
+	h.presenceMu.RUnlock()
+
+	out := make(map[string]cameraStatus, len(snap))
+	for id, s := range snap {
+		out[id] = cameraStatus{
+			hlsStats: s.stats(),
+			Presence: presenceSnap[id],
+		}
+	}
+	return out
+}

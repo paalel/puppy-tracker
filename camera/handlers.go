@@ -39,6 +39,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /camera/{id}/hls/{file}", h.handleHLSPut)
 	mux.HandleFunc("POST /camera/{id}/presence", h.handlePresenceUpdate)
 	mux.HandleFunc("GET /api/camera/{id}/presence", h.handlePresenceGet)
+	mux.HandleFunc("GET /api/camera/status", h.handleStatus)
 }
 
 func (h *Handler) validToken(s string) bool {
@@ -116,7 +117,14 @@ func (h *Handler) handleHLSPut(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "read error", http.StatusInternalServerError)
 		return
 	}
-	h.hub.camera(id).put(file, data)
+	interval := h.hub.camera(id).put(file, data)
+	if strings.HasSuffix(file, ".ts") {
+		if interval > 0 {
+			log.Printf("hls camera=%s seg=%s interval=%dms size=%dKB", id, file, interval.Milliseconds(), len(data)/1024)
+		} else {
+			log.Printf("hls camera=%s seg=%s size=%dKB (first)", id, file, len(data)/1024)
+		}
+	}
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -171,4 +179,11 @@ func (h *Handler) handlePresenceGet(w http.ResponseWriter, r *http.Request) {
 		"present": s.Present,
 		"stale":   stale,
 	})
+}
+
+// handleStatus returns health/status of all known cameras. No auth required
+// (data is non-sensitive: online/offline, segment count, presence).
+func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(h.hub.status())
 }

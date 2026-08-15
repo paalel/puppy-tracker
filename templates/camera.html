@@ -65,6 +65,9 @@
         <video id="stream"
                style="width:177.78vw;height:100vw;flex-shrink:0;transform:rotate(90deg);"
                autoplay muted playsinline></video>
+        <div id="loading" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="w-8 h-8 rounded-full border-2 border-stone-600 border-t-stone-400 animate-spin"></div>
+        </div>
         <div id="offline" class="hidden absolute inset-0 flex items-center justify-center pointer-events-none">
             <p class="text-stone-500 text-sm">Camera offline — retrying…</p>
         </div>
@@ -90,14 +93,45 @@
     <script>
     var video   = document.getElementById('stream');
     var offline = document.getElementById('offline');
+    var loading = document.getElementById('loading');
     var muteBtn = document.getElementById('mute-btn');
     var hls;
     var currentCamera = 'pen';
     var retryTimer;
+    var stallTimer;
+    var mediaErrCount = 0;
+    var hasPlayed = false;
+
+    function log(msg) {
+        console.log('[camera ' + currentCamera + '] ' + new Date().toISOString().slice(11,23) + ' ' + msg);
+    }
+
+    // Only activate the stall watchdog after the video has played at least once.
+    // Firing before first play creates an infinite reload loop during initial buffering.
+    video.addEventListener('waiting', function() {
+        if (!hasPlayed) return;
+        log('waiting for data');
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(function() {
+            if (!video.paused && document.visibilityState === 'visible') {
+                log('stall timeout — reloading');
+                loadCamera(currentCamera);
+            }
+        }, 8000);
+    });
+    video.addEventListener('playing', function() {
+        hasPlayed = true;
+        clearTimeout(stallTimer);
+        loading.classList.add('hidden');
+        log('playing');
+    });
 
     function loadCamera(id) {
         currentCamera = id;
         clearTimeout(retryTimer);
+        clearTimeout(stallTimer);
+        mediaErrCount = 0;
+        hasPlayed = false;
 
         ['pen', 'crate'].forEach(function(cam) {
             var btn = document.getElementById('btn-' + cam);
@@ -106,24 +140,51 @@
         });
 
         offline.classList.add('hidden');
+        loading.classList.remove('hidden');
         if (hls) { hls.destroy(); hls = null; }
 
+        log('loading ' + id);
         var src = '/camera/' + id + '/hls/stream.m3u8';
 
         if (Hls.isSupported()) {
-            hls = new Hls({ maxBufferLength: 10 });
+            hls = new Hls({
+                maxBufferLength: 4,         // small buffer — less stale content to catch up on
+                liveSyncDurationCount: 2,   // stay ~2 s behind live
+                liveMaxLatencyDurationCount: 6, // if >6 s behind, seek to live edge
+            });
             hls.loadSource(src);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, function() { video.play(); });
+            hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
+                var s = data.frag.stats;
+                var loadMs = s ? Math.round(s.loading.end - s.loading.start) : '?';
+                var sizeKB = s ? Math.round(s.total / 1024) : '?';
+                log('frag sn=' + data.frag.sn + ' load=' + loadMs + 'ms size=' + sizeKB + 'KB');
+            });
             hls.on(Hls.Events.ERROR, function(event, data) {
-                if (data.fatal) {
-                    offline.classList.remove('hidden');
-                    retryTimer = setTimeout(function() { loadCamera(currentCamera); }, 5000);
+                if (!data.fatal) {
+                    log('non-fatal ' + data.type + '/' + data.details);
+                    return;
                 }
+                log('fatal ' + data.type + '/' + data.details);
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    hls.startLoad();
+                    return;
+                }
+                if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaErrCount < 2) {
+                    mediaErrCount++;
+                    hls.recoverMediaError();
+                    return;
+                }
+                mediaErrCount = 0;
+                loading.classList.add('hidden');
+                offline.classList.remove('hidden');
+                retryTimer = setTimeout(function() { loadCamera(currentCamera); }, 5000);
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = src;
             video.addEventListener('error', function onErr() {
+                loading.classList.add('hidden');
                 offline.classList.remove('hidden');
                 retryTimer = setTimeout(function() { loadCamera(currentCamera); }, 5000);
                 video.removeEventListener('error', onErr);
