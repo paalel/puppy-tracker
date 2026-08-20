@@ -39,10 +39,3 @@ type ToiletAnalytics struct {
 	KDE        []float64
 }
 
-// AwakeAccidentBucket holds accident rate data for a 15-minute awake-window bucket.
-type AwakeAccidentBucket struct {
-	L string  `json:"l"` // label e.g. "0–15m"
-	R float64 `json:"r"` // accident rate %
-	T int     `json:"t"` // total sessions
-	A int     `json:"a"` // accidents
-}

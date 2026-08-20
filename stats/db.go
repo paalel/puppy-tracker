@@ -404,53 +404,37 @@ func computeCircularKDE(times []float64) []float64 {
 	return result
 }
 
-// getAccidentByAwake buckets sessions by how long the puppy was awake (15-min
-// intervals, capping at 90+) and returns the accident rate per bucket.
-func getAccidentByAwake(db *sql.DB) ([]AwakeAccidentBucket, error) {
-	labels := []string{"0–15m", "15–30m", "30–45m", "45–60m", "60–75m", "75–90m", "90+m"}
-	buckets := make([]AwakeAccidentBucket, 7)
-	for i, l := range labels {
-		buckets[i].L = l
-	}
-
+// getAccidentWeekly returns accident counts grouped by calendar week (Monday-based),
+// formatted as chart points with short date labels.
+func getAccidentWeekly(db *sql.DB) ([]ChartPoint, error) {
 	rows, err := db.Query(`
 		SELECT
-			CASE WHEN awake_mins >= 90 THEN 6
-			     ELSE awake_mins / 15
-			END AS bucket_idx,
-			COUNT(*) AS total,
-			SUM(CAST(toilet_accident AS INTEGER)) AS accidents
-		FROM (
-			SELECT
-				CAST((strftime('%s', slept_at) - strftime('%s', woke_at)) / 60 AS INTEGER) AS awake_mins,
-				toilet_accident
-			FROM sessions
-			WHERE woke_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0
-			  AND slept_at > woke_at
-		)
-		GROUP BY bucket_idx
-		ORDER BY bucket_idx
+			date(woke_at, '-' || ((cast(strftime('%w', woke_at) as integer) + 6) % 7) || ' days') AS week_mon,
+			COUNT(*) AS accidents
+		FROM sessions
+		WHERE toilet_accident = 1
+		GROUP BY week_mon
+		ORDER BY week_mon
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	var pts []ChartPoint
 	for rows.Next() {
-		var idx, total, accidents int
-		if err := rows.Scan(&idx, &total, &accidents); err != nil {
+		var weekStr string
+		var count int
+		if err := rows.Scan(&weekStr, &count); err != nil {
 			return nil, err
 		}
-		if idx < 0 || idx >= 7 {
+		t, err := time.Parse("2006-01-02", weekStr)
+		if err != nil {
 			continue
 		}
-		buckets[idx].T = total
-		buckets[idx].A = accidents
-		if total > 0 {
-			buckets[idx].R = math.Round(float64(accidents)/float64(total)*1000) / 10
-		}
+		pts = append(pts, ChartPoint{X: t.Format("Jan 2"), Y: count})
 	}
-	return buckets, rows.Err()
+	return pts, rows.Err()
 }
 
 func queryDateMins(db *sql.DB, query string) (map[string]int, error) {

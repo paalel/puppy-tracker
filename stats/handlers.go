@@ -45,9 +45,8 @@ type StatsData struct {
 	TotalPoops          int
 	TotalWakes          int
 	TotalSleepJSON      template.JS
-	AccidentTrendJSON   template.JS
-	AccidentAwakeJSON   template.JS
-	TotalAccidents      int
+	AccidentWeeklyJSON template.JS
+	TotalAccidents     int
 }
 
 func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
@@ -117,14 +116,12 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		for _, d := range days {
 			sd.TotalAccidents += d.AccidentCount
 		}
-		sd.AccidentTrendJSON = mustJSON(accidentTrendPoints(days))
-
-		aw, err := getAccidentByAwake(h.db)
+		weekly, err := getAccidentWeekly(h.db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		sd.AccidentAwakeJSON = mustJSON(aw)
+		sd.AccidentWeeklyJSON = mustJSON(weekly)
 	}
 
 	var buf bytes.Buffer
