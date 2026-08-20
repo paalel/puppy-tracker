@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-const cookieName = "camera_auth"
-
 type Handler struct {
 	hub   *hub
 	tmpl  *template.Template
@@ -34,8 +32,6 @@ func New(db *sql.DB, tmpl *template.Template) *Handler {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /camera", h.handlePage)
-	mux.HandleFunc("POST /camera", h.handleLogin)
-	mux.HandleFunc("GET /camera/{id}/hls/{file}", h.handleHLSGet)
 	mux.HandleFunc("PUT /camera/{id}/hls/{file}", h.handleHLSPut)
 	mux.HandleFunc("POST /camera/{id}/presence", h.handlePresenceUpdate)
 	mux.HandleFunc("GET /api/camera/{id}/presence", h.handlePresenceGet)
@@ -49,32 +45,10 @@ func (h *Handler) validToken(s string) bool {
 	return subtle.ConstantTimeCompare([]byte(s), []byte(h.token)) == 1
 }
 
-func (h *Handler) authenticated(r *http.Request) bool {
-	c, err := r.Cookie(cookieName)
-	if err != nil {
-		return false
-	}
-	return h.validToken(c.Value)
-}
-
-type loginData struct {
-	Error bool
-}
-
 func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
-	var (
-		name string
-		data any
-	)
-	if h.authenticated(r) {
-		name = "camera-page"
-	} else {
-		name = "camera-login"
-		data = &loginData{Error: r.URL.Query().Get("error") == "1"}
-	}
 	var buf bytes.Buffer
-	if err := h.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
-		log.Printf("%s template: %v", name, err)
+	if err := h.tmpl.ExecuteTemplate(&buf, "camera-page", nil); err != nil {
+		log.Printf("camera-page template: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -82,28 +56,7 @@ func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	if !h.validToken(r.FormValue("token")) {
-		http.Redirect(w, r, "/camera?error=1", http.StatusSeeOther)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     cookieName,
-		Value:    h.token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   365 * 24 * 60 * 60,
-		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-	})
-	http.Redirect(w, r, "/camera", http.StatusSeeOther)
-}
-
-// handleHLSPut receives HLS playlist and segments from the Pi via FFmpeg -method PUT.
+// handleHLSPut receives HLS playlist and segments from the Pi.
 func (h *Handler) handleHLSPut(w http.ResponseWriter, r *http.Request) {
 	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !h.validToken(auth) {
@@ -126,28 +79,6 @@ func (h *Handler) handleHLSPut(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusCreated)
-}
-
-// handleHLSGet serves HLS playlist and segments to the browser (cookie-authenticated).
-func (h *Handler) handleHLSGet(w http.ResponseWriter, r *http.Request) {
-	if !h.authenticated(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	id := r.PathValue("id")
-	file := r.PathValue("file")
-	data, ok := h.hub.camera(id).get(file)
-	if !ok {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-cache")
-	if strings.HasSuffix(file, ".m3u8") {
-		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	} else {
-		w.Header().Set("Content-Type", "video/mp2t")
-	}
-	w.Write(data)
 }
 
 // handlePresenceUpdate receives puppy presence status from the Pi.
@@ -181,8 +112,7 @@ func (h *Handler) handlePresenceGet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleStatus returns health/status of all known cameras. No auth required
-// (data is non-sensitive: online/offline, segment count, presence).
+// handleStatus returns health/status of all known cameras.
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(h.hub.status())
