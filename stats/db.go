@@ -404,6 +404,55 @@ func computeCircularKDE(times []float64) []float64 {
 	return result
 }
 
+// getAccidentByAwake buckets sessions by how long the puppy was awake (15-min
+// intervals, capping at 90+) and returns the accident rate per bucket.
+func getAccidentByAwake(db *sql.DB) ([]AwakeAccidentBucket, error) {
+	labels := []string{"0–15m", "15–30m", "30–45m", "45–60m", "60–75m", "75–90m", "90+m"}
+	buckets := make([]AwakeAccidentBucket, 7)
+	for i, l := range labels {
+		buckets[i].L = l
+	}
+
+	rows, err := db.Query(`
+		SELECT
+			CASE WHEN awake_mins >= 90 THEN 6
+			     ELSE awake_mins / 15
+			END AS bucket_idx,
+			COUNT(*) AS total,
+			SUM(CAST(toilet_accident AS INTEGER)) AS accidents
+		FROM (
+			SELECT
+				CAST((strftime('%s', slept_at) - strftime('%s', woke_at)) / 60 AS INTEGER) AS awake_mins,
+				toilet_accident
+			FROM sessions
+			WHERE woke_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0
+			  AND slept_at > woke_at
+		)
+		GROUP BY bucket_idx
+		ORDER BY bucket_idx
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var idx, total, accidents int
+		if err := rows.Scan(&idx, &total, &accidents); err != nil {
+			return nil, err
+		}
+		if idx < 0 || idx >= 7 {
+			continue
+		}
+		buckets[idx].T = total
+		buckets[idx].A = accidents
+		if total > 0 {
+			buckets[idx].R = math.Round(float64(accidents)/float64(total)*1000) / 10
+		}
+	}
+	return buckets, rows.Err()
+}
+
 func queryDateMins(db *sql.DB, query string) (map[string]int, error) {
 	rows, err := db.Query(query)
 	if err != nil {

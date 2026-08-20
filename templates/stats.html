@@ -190,9 +190,11 @@
 
         {{else if eq .Tab "toilet"}}
 
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
         {{/* ── Accident streak ────────────────────────────────────────────────── */}}
         {{with .AccidentStats}}
-        <div class="card px-5 py-3 mb-4">
+        <div class="card px-5 py-3 mb-3">
             <div class="flex items-center gap-4">
                 <div>
                     <p class="text-2xl font-bold {{if eq .CurrentStreak 0}}text-rose-500{{else}}text-emerald-500{{end}}">{{.CurrentStreak}}</p>
@@ -207,7 +209,7 @@
                     {{if eq .CurrentStreak 0}}
                     <p class="text-xs text-rose-400">Oops — back to zero</p>
                     {{else if gt .CurrentStreak .RecordStreak}}
-                    <p class="text-xs text-emerald-500 font-medium">New record! 🎉</p>
+                    <p class="text-xs text-emerald-500 font-medium">New record!</p>
                     {{else if ge .CurrentStreak (div (mul .RecordStreak 9) 10)}}
                     <p class="text-xs text-amber-500 font-medium">So close to the record!</p>
                     {{else if ge .CurrentStreak (div .RecordStreak 2)}}
@@ -220,7 +222,102 @@
         </div>
         {{end}}
 
-        {{/* ── Toilet distribution ───────────────────────────────────────────── */}}
+        {{if .TotalAccidents}}
+
+        {{/* ── Accident trend ──────────────────────────────────────────────────── */}}
+        <div class="card p-4 mb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Accidents per day</p>
+            <p class="text-xs text-stone-300 mb-3">Last 30 days — is the trend improving?</p>
+            <div style="position:relative;height:140px">
+                <canvas id="accidentTrendChart"></canvas>
+            </div>
+        </div>
+
+        {{/* ── Accidents by awake window ────────────────────────────────────────── */}}
+        <div class="card p-4 mb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Accidents by awake window</p>
+            <p class="text-xs text-stone-300 mb-3">How far into the awake window accidents tend to happen</p>
+            <div style="position:relative;height:140px">
+                <canvas id="accidentAwakeChart"></canvas>
+            </div>
+            <p class="text-xs text-stone-300 mt-3 text-center">{{.TotalAccidents}} total accidents</p>
+        </div>
+
+        <script>
+        (function() {
+            var trend = {{.AccidentTrendJSON}};
+            new Chart(document.getElementById('accidentTrendChart'), {
+                type: 'bar',
+                data: {
+                    labels: trend.map(function(p) { return p.x; }),
+                    datasets: [{
+                        data: trend.map(function(p) { return p.y; }),
+                        backgroundColor: 'rgba(244,63,94,0.5)',
+                        borderColor: 'rgb(244,63,94)',
+                        borderWidth: 1,
+                    }],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 10, maxRotation: 0 } },
+                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10 }, stepSize: 1 } },
+                    },
+                },
+            });
+
+            var buckets = {{.AccidentAwakeJSON}};
+            new Chart(document.getElementById('accidentAwakeChart'), {
+                type: 'bar',
+                data: {
+                    labels: buckets.map(function(b) { return b.l; }),
+                    datasets: [{
+                        data: buckets.map(function(b) { return b.r; }),
+                        backgroundColor: buckets.map(function(b) {
+                            if (b.r === 0) return 'rgba(168,162,158,0.2)';
+                            if (b.r < 10)  return 'rgba(245,158,11,0.5)';
+                            return 'rgba(244,63,94,0.6)';
+                        }),
+                        borderColor: buckets.map(function(b) {
+                            if (b.r === 0) return 'rgba(168,162,158,0.4)';
+                            if (b.r < 10)  return 'rgb(245,158,11)';
+                            return 'rgb(244,63,94)';
+                        }),
+                        borderWidth: 1,
+                    }],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    var b = buckets[ctx.dataIndex];
+                                    if (b.t === 0) return 'No sessions';
+                                    return b.a + ' of ' + b.t + ' sessions (' + b.r + '%)';
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { color: 'rgba(0,0,0,0.04)' },
+                            ticks: { font: { size: 10 }, callback: function(v) { return v + '%'; } },
+                        },
+                    },
+                },
+            });
+        })();
+        </script>
+
+        {{end}}
+
+        {{/* ── Poop distribution ─────────────────────────────────────────────── */}}
         <div class="card p-4">
             <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-1">Poop distribution</p>
             <div class="flex gap-3 mb-3">
@@ -232,7 +329,6 @@
             </div>
             <p class="text-xs text-stone-300 mt-3 text-center">{{.TotalPoops}} poops · {{.TotalWakes}} wake windows{{if not .KDEJSON}} · KDE from {{5}} observations{{end}}</p>
         </div>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
         <script>
         (function() {
             var labels = ['00','01','02','03','04','05','06','07','08','09','10','11',

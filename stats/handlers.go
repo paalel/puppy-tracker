@@ -41,10 +41,13 @@ type StatsData struct {
 	SettleDayHardJSON   template.JS
 	SettleDayNoneJSON   template.JS
 	BucketJSON          template.JS
-	KDEJSON          template.JS
-	TotalPoops       int
-	TotalWakes       int
-	TotalSleepJSON   template.JS
+	KDEJSON             template.JS
+	TotalPoops          int
+	TotalWakes          int
+	TotalSleepJSON      template.JS
+	AccidentTrendJSON   template.JS
+	AccidentAwakeJSON   template.JS
+	TotalAccidents      int
 }
 
 func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +113,18 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sd.AccidentStats = as
+
+		for _, d := range days {
+			sd.TotalAccidents += d.AccidentCount
+		}
+		sd.AccidentTrendJSON = mustJSON(accidentTrendPoints(days))
+
+		aw, err := getAccidentByAwake(h.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.AccidentAwakeJSON = mustJSON(aw)
 	}
 
 	var buf bytes.Buffer
