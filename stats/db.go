@@ -475,6 +475,7 @@ func getSettleByActivity(db *sql.DB) ([]SettleFactor, error) {
 		FROM sessions
 		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL
 		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
+		  AND date >= date('now', '-42 days')  -- last 6 weeks, so it reflects the puppy she is now
 	`)
 	if err != nil {
 		return nil, err
@@ -559,6 +560,7 @@ func getSettleByActivityCount(db *sql.DB) ([]SettleCount, error) {
 		FROM sessions
 		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL
 		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
+		  AND date >= date('now', '-42 days')  -- last 6 weeks, so it reflects the puppy she is now
 	`)
 	if err != nil {
 		return nil, err
