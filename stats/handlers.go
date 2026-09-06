@@ -32,6 +32,7 @@ type StatsData struct {
 	TotalSleepJSON     template.JS
 	SettleWeeklyJSON   template.JS
 	SettleFactors      []SettleFactor
+	SettleCounts       []SettleCount
 	AccidentStats      *AccidentStats
 	PoopTimings        []PoopTiming
 	PoopDensitiesJSON  template.JS
@@ -79,6 +80,13 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sd.SettleFactors = factors
+
+		counts, err := getSettleByActivityCount(h.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.SettleCounts = counts
 
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)

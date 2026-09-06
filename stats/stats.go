@@ -65,3 +65,13 @@ type SettleFactor struct {
 	DeltaMins  float64 // WithAvg − WithoutAvg
 	BarPct     int     // bar width 0–100, scaled to the strongest effect
 }
+
+// SettleCount summarises settle time by how many activities the awake window
+// included (0, 1, 2, 3+) — showing whether doing more helps or backfires.
+type SettleCount struct {
+	Label   string
+	AvgMins int
+	N       int
+	BarPct  int  // scaled to the slowest bucket
+	Best    bool // fastest bucket among those with enough data
+}

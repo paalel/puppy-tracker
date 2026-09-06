@@ -129,6 +129,28 @@
         </div>
         {{end}}
 
+        {{/* ── Does doing more help? ────────────────────────────────────────────── */}}
+        {{if .SettleCounts}}
+        <div class="card p-4 mb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Does doing more help?</p>
+            <p class="text-xs text-stone-300 mb-3">How fast she settles by how many things you did while she was awake</p>
+            <div class="space-y-3">
+            {{range .SettleCounts}}
+            <div>
+                <div class="flex items-baseline justify-between mb-1 gap-3">
+                    <span class="text-sm text-stone-600">{{.Label}}{{if .Best}} <span class="text-emerald-600 font-medium">· sweet spot</span>{{end}}</span>
+                    <span class="text-xs text-stone-400"><span class="font-semibold text-stone-600">{{.AvgMins}} min</span> to settle</span>
+                </div>
+                <div class="h-1.5 rounded-full bg-stone-100 overflow-hidden">
+                    <div class="h-1.5 rounded-full {{if .Best}}bg-emerald-400{{else}}bg-stone-300{{end}}" style="width:{{.BarPct}}%"></div>
+                </div>
+            </div>
+            {{end}}
+            </div>
+            <p class="text-xs text-stone-300 mt-3">A bit of enrichment helps her settle; too much right before the crate can backfire.</p>
+        </div>
+        {{end}}
+
         {{else if eq .Tab "toilet"}}
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

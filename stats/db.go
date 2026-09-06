@@ -545,6 +545,71 @@ func getSettleByActivity(db *sql.DB) ([]SettleFactor, error) {
 	return factors, nil
 }
 
+// minCountSamples is the fewest sessions before a bucket can be crowned the
+// fastest — keeps sparse 3+/4-activity buckets from winning on noise.
+const minCountSamples = 20
+
+// getSettleByActivityCount groups sessions by how many activities their awake
+// window included (0, 1, 2, 3+) and reports the average settle time of each,
+// revealing whether more enrichment keeps helping or starts to backfire.
+func getSettleByActivityCount(db *sql.DB) ([]SettleCount, error) {
+	rows, err := db.Query(`
+		SELECT CAST(strftime('%s', slept_at) - strftime('%s', crate_at) AS REAL) / 60.0,
+		       physical_activity + mental_activity + environmental_activity + calm_winddown
+		FROM sessions
+		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL
+		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sums := make([]float64, 4) // buckets 0, 1, 2, 3+
+	counts := make([]int, 4)
+	for rows.Next() {
+		var settle float64
+		var k int
+		if err := rows.Scan(&settle, &k); err != nil {
+			return nil, err
+		}
+		if k > 3 {
+			k = 3
+		}
+		sums[k] += settle
+		counts[k]++
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	labels := []string{"Nothing", "1 thing", "2 things", "3+ things"}
+	var out []SettleCount
+	var avgs []float64 // aligned with out, for bar scaling
+	maxAvg, bestAvg, bestPos := 0.0, math.MaxFloat64, -1
+	for i := range labels {
+		if counts[i] == 0 {
+			continue
+		}
+		avg := sums[i] / float64(counts[i])
+		if avg > maxAvg {
+			maxAvg = avg
+		}
+		if counts[i] >= minCountSamples && avg < bestAvg {
+			bestAvg, bestPos = avg, len(out)
+		}
+		out = append(out, SettleCount{Label: labels[i], AvgMins: int(math.Round(avg)), N: counts[i]})
+		avgs = append(avgs, avg)
+	}
+	for i := range out {
+		if maxAvg > 0 {
+			out[i].BarPct = int(math.Round(avgs[i] / maxAvg * 100))
+		}
+		out[i].Best = i == bestPos
+	}
+	return out, nil
+}
+
 // getSettleWeekly returns average settle time (crate→sleep) per week, labelled by age week.
 func getSettleWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 	rows, err := db.Query(`
