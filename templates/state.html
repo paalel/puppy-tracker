@@ -79,7 +79,8 @@
     </div>
     <h2 class="text-xl font-semibold text-stone-800 mb-1">{{.Config.PuppyName}} is awake</h2>
     {{with currentSession .Sessions}}
-    <p class="text-xs text-stone-400 mb-3 uppercase tracking-wide">{{.Label}}</p>
+    <p class="text-xs text-stone-400 uppercase tracking-wide {{if .SleepDuration}}mb-0.5{{else}}mb-3{{end}}">{{.Label}}</p>
+    {{if .SleepDuration}}<p class="text-xs text-stone-300 mb-3">after {{.SleepDuration}} nap</p>{{end}}
     <ul class="mb-4 space-y-1.5">
         {{range .Activities}}
         <li class="text-sm text-stone-600 flex gap-2"><span class="text-stone-300">·</span>{{.}}</li>
