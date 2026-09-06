@@ -33,10 +33,9 @@ type SessionSeries struct {
 }
 
 type ToiletAnalytics struct {
-	Buckets    []int
-	TotalPoops int
-	TotalWakes int
-	KDE        []float64
+	TotalPoops    int
+	FirstPoopKDE  []float64 // normalised 0–1, one value per hour 0–23
+	SecondPoopKDE []float64
 }
 
 type FloatPoint struct {

@@ -316,74 +316,65 @@ func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
 
 func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 	rows, err := db.Query(`
-		SELECT woke_at, toilet_poop FROM sessions WHERE woke_at IS NOT NULL ORDER BY woke_at ASC
+		SELECT
+			MIN(CASE WHEN rn = 1 THEN hour_frac END) AS first_poop,
+			MIN(CASE WHEN rn = 2 THEN hour_frac END) AS second_poop
+		FROM (
+			SELECT date,
+			       CAST(strftime('%H', woke_at, 'localtime') AS REAL) +
+			       CAST(strftime('%M', woke_at, 'localtime') AS REAL) / 60.0 AS hour_frac,
+			       ROW_NUMBER() OVER (PARTITION BY date ORDER BY woke_at) AS rn
+			FROM sessions
+			WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0
+		) GROUP BY date
+		HAVING first_poop IS NOT NULL
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	buckets := make([]int, 24)
-	opportunities := make([]int, 24)
-	poopCounts := make([]int, 24)
-	var poopTimes []float64
-
+	var firstTimes, secondTimes []float64
 	for rows.Next() {
-		var s string
-		var poopInt int
-		if err := rows.Scan(&s, &poopInt); err != nil {
+		var first float64
+		var second sql.NullFloat64
+		if err := rows.Scan(&first, &second); err != nil {
 			return nil, err
 		}
-		t, err := parseTimestamp(s)
-		if err != nil {
-			continue
-		}
-		lt := t.Local()
-		h := lt.Hour()
-		opportunities[h]++
-		if poopInt == 1 {
-			buckets[h]++
-			poopCounts[h]++
-			poopTimes = append(poopTimes, float64(lt.Hour())+float64(lt.Minute())/60.0)
+		firstTimes = append(firstTimes, first)
+		if second.Valid {
+			secondTimes = append(secondTimes, second.Float64)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	totalWakes := 0
-	for _, v := range opportunities {
-		totalWakes += v
+	ta := &ToiletAnalytics{TotalPoops: len(firstTimes) + len(secondTimes)}
+	if len(firstTimes) >= minKDESamples {
+		ta.FirstPoopKDE = normaliseKDE(computeCircularKDE(firstTimes))
 	}
-
-	ta := &ToiletAnalytics{
-		Buckets:    buckets,
-		TotalPoops: len(poopTimes),
-		TotalWakes: totalWakes,
+	if len(secondTimes) >= minKDESamples {
+		ta.SecondPoopKDE = normaliseKDE(computeCircularKDE(secondTimes))
 	}
-
-	if len(poopTimes) >= minKDESamples {
-		ta.KDE = computeCircularKDE(poopTimes)
-		maxBar, maxKDE := 0, 0.0
-		for _, v := range buckets {
-			if v > maxBar {
-				maxBar = v
-			}
-		}
-		for _, v := range ta.KDE {
-			if v > maxKDE {
-				maxKDE = v
-			}
-		}
-		if maxKDE > 0 && maxBar > 0 {
-			scale := float64(maxBar) / maxKDE
-			for i := range ta.KDE {
-				ta.KDE[i] *= scale
-			}
-		}
-	}
-
 	return ta, nil
+}
+
+func normaliseKDE(kde []float64) []float64 {
+	maxVal := 0.0
+	for _, v := range kde {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+	if maxVal == 0 {
+		return kde
+	}
+	out := make([]float64, len(kde))
+	for i, v := range kde {
+		out[i] = math.Round(v/maxVal*1000) / 1000
+	}
+	return out
 }
 
 // computeCircularKDE evaluates a Gaussian KDE at the midpoint of each hour,

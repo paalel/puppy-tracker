@@ -32,10 +32,9 @@ type StatsData struct {
 	TotalSleepJSON     template.JS
 	SettleWeeklyJSON   template.JS
 	AccidentStats      *AccidentStats
-	BucketJSON         template.JS
-	KDEJSON            template.JS
+	FirstPoopKDEJSON   template.JS
+	SecondPoopKDEJSON  template.JS
 	TotalPoops         int
-	TotalWakes         int
 	AccidentWeeklyJSON template.JS
 	TotalAccidents     int
 	PeeWeeklyJSON      template.JS
@@ -79,12 +78,9 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		sd.BucketJSON = mustJSON(ta.Buckets)
 		sd.TotalPoops = ta.TotalPoops
-		sd.TotalWakes = ta.TotalWakes
-		if ta.KDE != nil {
-			sd.KDEJSON = mustJSON(ta.KDE)
-		}
+		sd.FirstPoopKDEJSON = mustJSON(ta.FirstPoopKDE)
+		sd.SecondPoopKDEJSON = mustJSON(ta.SecondPoopKDE)
 		as, err := getAccidentStats(h.db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
