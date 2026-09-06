@@ -11,6 +11,14 @@ import (
 	"puppy/store"
 )
 
+// hourWindowPct maps a local hour to a percentage of the poop-timing chart's
+// fixed 5:00–22:00 window, clamped to [0,100].
+func hourWindowPct(h float64) float64 {
+	const lo, hi = 5.0, 22.0
+	pct := (h - lo) / (hi - lo) * 100
+	return math.Max(0, math.Min(100, pct))
+}
+
 func parseTemplates() (*template.Template, error) {
 	funcs := template.FuncMap{
 		"div": func(a, b int) int { return a / b },
@@ -143,6 +151,20 @@ func parseTemplates() (*template.Template, error) {
 				return ""
 			}
 			return fmt.Sprintf("(%d–%d%%)", int(lo*100), int(hi*100))
+		},
+		"fmtHourFrac": func(h float64) string {
+			hh := int(h)
+			mm := int((h - float64(hh)) * 60)
+			return fmt.Sprintf("%02d:%02d", hh, mm)
+		},
+		// hourPct maps a local hour (fractional) to a horizontal percentage within
+		// the poop-timing chart's fixed 5:00–22:00 window, clamped to [0,100].
+		"hourPct": func(h float64) string {
+			return fmt.Sprintf("%.1f", hourWindowPct(h))
+		},
+		// hourSpanPct is the width, in percent, between two hours in the same window.
+		"hourSpanPct": func(lo, hi float64) string {
+			return fmt.Sprintf("%.1f", hourWindowPct(hi)-hourWindowPct(lo))
 		},
 		"poopAlert": func(p float64) string {
 			switch {

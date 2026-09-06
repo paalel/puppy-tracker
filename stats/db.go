@@ -4,17 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"strings"
+	"sort"
 	"time"
 
 	"puppy/store"
 )
-
-const (
-	minKDESamples = 5
-	kdeBandwidth  = 1.5
-)
-
 
 func parseTimestamp(s string) (time.Time, error) { return store.ParseTimestamp(s) }
 
@@ -148,100 +142,6 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	return days, nil
 }
 
-func getSessionSeries(db *sql.DB) (*SessionSeries, error) {
-	rows, err := db.Query(`
-		SELECT
-			woke_at,
-			crate_at,
-			slept_at,
-			COALESCE(sleep_ease, ''),
-			CAST((strftime('%s', slept_at) - strftime('%s', woke_at)) / 60 AS INTEGER),
-			CASE WHEN crate_at IS NOT NULL
-			     THEN CAST((strftime('%s', slept_at) - strftime('%s', crate_at)) / 60 AS INTEGER)
-			     ELSE NULL END,
-			CASE WHEN LEAD(date) OVER (ORDER BY id) = date
-			     THEN CAST((strftime('%s', LEAD(woke_at) OVER (ORDER BY id)) - strftime('%s', slept_at)) / 60 AS INTEGER)
-			     ELSE NULL END
-		FROM sessions
-		WHERE woke_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0
-		  AND date >= date('now', '-30 days')
-		ORDER BY id ASC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	s := &SessionSeries{}
-	for rows.Next() {
-		var wokeAt, sleptAt, sleepEase string
-		var crateAt sql.NullString
-		var awakeMins int
-		var settleMins, napMins sql.NullInt64
-		if err := rows.Scan(&wokeAt, &crateAt, &sleptAt, &sleepEase, &awakeMins, &settleMins, &napMins); err != nil {
-			return nil, err
-		}
-		s.Awake = append(s.Awake, ChartPoint{X: strings.Replace(wokeAt, " ", "T", 1), Y: awakeMins})
-		if settleMins.Valid {
-			p := ChartPoint{X: strings.Replace(crateAt.String, " ", "T", 1), Y: int(settleMins.Int64)}
-			switch sleepEase {
-			case "easy":
-				s.SettleEasy = append(s.SettleEasy, p)
-			case "ok":
-				s.SettleOk = append(s.SettleOk, p)
-			case "hard":
-				s.SettleHard = append(s.SettleHard, p)
-			default:
-				s.SettleNone = append(s.SettleNone, p)
-			}
-		}
-		if napMins.Valid {
-			s.Nap = append(s.Nap, ChartPoint{X: strings.Replace(sleptAt, " ", "T", 1), Y: int(napMins.Int64)})
-		}
-	}
-	return s, rows.Err()
-}
-
-func getSettleByDay(db *sql.DB, today string) (easy, ok, hard, none []ChartPoint, err error) {
-	rows, err := db.Query(`
-		SELECT date, COALESCE(sleep_ease, ''),
-		       SUM(CAST(strftime('%s', slept_at) - strftime('%s', crate_at) AS INTEGER)) / 60
-		FROM sessions
-		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0
-		  AND date >= date('now', '-30 days')
-		  AND date NOT IN (SELECT DISTINCT date FROM sessions WHERE excluded = 1)
-		GROUP BY date, sleep_ease
-		ORDER BY date ASC
-	`)
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var date, ease string
-		var mins int
-		if err = rows.Scan(&date, &ease, &mins); err != nil {
-			return
-		}
-		if date == today {
-			continue
-		}
-		p := ChartPoint{X: date, Y: mins}
-		switch ease {
-		case "easy":
-			easy = append(easy, p)
-		case "ok":
-			ok = append(ok, p)
-		case "hard":
-			hard = append(hard, p)
-		default:
-			none = append(none, p)
-		}
-	}
-	err = rows.Err()
-	return
-}
-
 type AccidentStats struct {
 	CurrentStreak int
 	RecordStreak  int
@@ -314,86 +214,90 @@ func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
 	return &AccidentStats{CurrentStreak: current, RecordStreak: record}, nil
 }
 
+// minTimingSamples is the fewest observations before a poop's timing is
+// summarised. Set so only regular daily poops appear: with ~77 tracked days
+// the 1st (72) and 2nd (55) poop clear it, while the occasional 3rd (7) and
+// 4th (1) are dropped — showing them would imply a routine that isn't there.
+const minTimingSamples = 10
+
+// getToiletAnalytics groups poops by their ordinal within each day (1st, 2nd, …)
+// and summarises each ordinal's timing as median + interquartile range. Ordinals
+// with fewer than minTimingSamples observations are dropped rather than shown noisily.
 func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 	rows, err := db.Query(`
 		SELECT
-			MIN(CASE WHEN rn = 1 THEN hour_frac END) AS first_poop,
-			MIN(CASE WHEN rn = 2 THEN hour_frac END) AS second_poop
-		FROM (
-			SELECT date,
-			       CAST(strftime('%H', woke_at, 'localtime') AS REAL) +
-			       CAST(strftime('%M', woke_at, 'localtime') AS REAL) / 60.0 AS hour_frac,
-			       ROW_NUMBER() OVER (PARTITION BY date ORDER BY woke_at) AS rn
-			FROM sessions
-			WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0
-		) GROUP BY date
-		HAVING first_poop IS NOT NULL
+			ROW_NUMBER() OVER (PARTITION BY date ORDER BY woke_at) AS ordinal,
+			CAST(strftime('%H', woke_at, 'localtime') AS REAL) +
+			CAST(strftime('%M', woke_at, 'localtime') AS REAL) / 60.0 AS hour_frac
+		FROM sessions
+		WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0
+		ORDER BY ordinal
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var firstTimes, secondTimes []float64
+	byOrdinal := map[int][]float64{}
+	total := 0
 	for rows.Next() {
-		var first float64
-		var second sql.NullFloat64
-		if err := rows.Scan(&first, &second); err != nil {
+		var ordinal int
+		var hourFrac float64
+		if err := rows.Scan(&ordinal, &hourFrac); err != nil {
 			return nil, err
 		}
-		firstTimes = append(firstTimes, first)
-		if second.Valid {
-			secondTimes = append(secondTimes, second.Float64)
-		}
+		byOrdinal[ordinal] = append(byOrdinal[ordinal], hourFrac)
+		total++
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	ta := &ToiletAnalytics{TotalPoops: len(firstTimes) + len(secondTimes)}
-	if len(firstTimes) >= minKDESamples {
-		ta.FirstPoopKDE = normaliseKDE(computeCircularKDE(firstTimes))
-	}
-	if len(secondTimes) >= minKDESamples {
-		ta.SecondPoopKDE = normaliseKDE(computeCircularKDE(secondTimes))
+	ta := &ToiletAnalytics{TotalPoops: total}
+	for ordinal := 1; ; ordinal++ {
+		times, ok := byOrdinal[ordinal]
+		if !ok || len(times) < minTimingSamples {
+			break
+		}
+		sort.Float64s(times)
+		ta.Timings = append(ta.Timings, PoopTiming{
+			Label:  ordinalLabel(ordinal),
+			Count:  len(times),
+			Median: percentile(times, 0.5),
+			P25:    percentile(times, 0.25),
+			P75:    percentile(times, 0.75),
+		})
 	}
 	return ta, nil
 }
 
-func normaliseKDE(kde []float64) []float64 {
-	maxVal := 0.0
-	for _, v := range kde {
-		if v > maxVal {
-			maxVal = v
-		}
+func ordinalLabel(n int) string {
+	switch n {
+	case 1:
+		return "1st"
+	case 2:
+		return "2nd"
+	case 3:
+		return "3rd"
+	default:
+		return fmt.Sprintf("%dth", n)
 	}
-	if maxVal == 0 {
-		return kde
-	}
-	out := make([]float64, len(kde))
-	for i, v := range kde {
-		out[i] = math.Round(v/maxVal*1000) / 1000
-	}
-	return out
 }
 
-// computeCircularKDE evaluates a Gaussian KDE at the midpoint of each hour,
-// wrapping around midnight so 23:30 and 00:30 are treated as close.
-func computeCircularKDE(times []float64) []float64 {
-	result := make([]float64, 24)
-	for h := 0; h < 24; h++ {
-		x := float64(h) + 0.5
-		for _, t := range times {
-			d := x - t
-			if d > 12 {
-				d -= 24
-			} else if d < -12 {
-				d += 24
-			}
-			result[h] += math.Exp(-0.5 * d * d / (kdeBandwidth * kdeBandwidth))
-		}
+// percentile returns the p-quantile (0–1) of a pre-sorted slice via linear
+// interpolation between adjacent ranks.
+func percentile(sorted []float64, p float64) float64 {
+	if len(sorted) == 0 {
+		return 0
 	}
-	return result
+	if len(sorted) == 1 {
+		return sorted[0]
+	}
+	rank := p * float64(len(sorted)-1)
+	lo := int(math.Floor(rank))
+	hi := int(math.Ceil(rank))
+	frac := rank - float64(lo)
+	return sorted[lo] + frac*(sorted[hi]-sorted[lo])
 }
 
 // getPeeWeekly returns average pees per tracked (non-excluded) day, one point per week

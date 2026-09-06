@@ -23,19 +23,19 @@ type ChartPoint struct {
 	Y int    `json:"y"`
 }
 
-type SessionSeries struct {
-	Awake      []ChartPoint
-	Nap        []ChartPoint
-	SettleEasy []ChartPoint
-	SettleOk   []ChartPoint
-	SettleHard []ChartPoint
-	SettleNone []ChartPoint
+// PoopTiming summarises when the Nth poop of the day typically happens,
+// as fractional local hours (e.g. 8.5 = 08:30). Median with p25–p75 range.
+type PoopTiming struct {
+	Label  string  `json:"label"`
+	Count  int     `json:"count"`
+	Median float64 `json:"median"`
+	P25    float64 `json:"p25"`
+	P75    float64 `json:"p75"`
 }
 
 type ToiletAnalytics struct {
-	TotalPoops    int
-	FirstPoopKDE  []float64 // normalised 0–1, one value per hour 0–23
-	SecondPoopKDE []float64
+	TotalPoops int
+	Timings    []PoopTiming
 }
 
 type FloatPoint struct {
