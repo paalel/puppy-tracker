@@ -123,6 +123,26 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		views = buildPastSchedule(dbSessions, routineSessions)
 	}
 
+	// Show how long she slept before the current awake window. linkNaps only
+	// spans same-day sessions, so the first wake of the day (after the overnight
+	// sleep) would otherwise be blank — fill it from the previous slept_at.
+	if isToday {
+		for i := range views {
+			if !views[i].IsActive || views[i].SleepDuration != "" || views[i].ActualWake == nil {
+				continue
+			}
+			prev, err := getSleptAtBefore(db, *views[i].ActualWake)
+			if err != nil {
+				return nil, fmt.Errorf("sleep before active: %w", err)
+			}
+			if prev != nil {
+				if d := views[i].ActualWake.Sub(*prev); d > 0 {
+					views[i].SleepDuration = formatDuration(d)
+				}
+			}
+		}
+	}
+
 	if pred != nil && isToday {
 		hoursSincePoop, _ := getHoursSinceLastPoop(db)
 		if hoursSincePoop >= 0 {

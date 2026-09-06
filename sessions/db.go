@@ -112,6 +112,29 @@ func toggleAloneMode(db *sql.DB) error {
 	return err
 }
 
+// getSleptAtBefore returns the most recent slept_at strictly before t, or nil.
+// Used to show how long she slept before the current awake window, including the
+// overnight sleep before the first wake of the day (which linkNaps can't span).
+func getSleptAtBefore(db *sql.DB, t time.Time) (*time.Time, error) {
+	var raw sql.NullString
+	err := db.QueryRow(
+		`SELECT MAX(slept_at) FROM sessions WHERE slept_at IS NOT NULL AND slept_at < ?`,
+		store.FormatTimestamp(t),
+	).Scan(&raw)
+	if err == sql.ErrNoRows || !raw.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := parseTimestamp(raw.String)
+	if err != nil {
+		return nil, err
+	}
+	lt := parsed.Local()
+	return &lt, nil
+}
+
 func logCrate(db *sql.DB) error {
 	_, err := db.Exec(`
 		UPDATE sessions SET crate_at = ?
