@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"puppy/alone"
 	"puppy/config"
 	"puppy/routine"
 	"puppy/sessions"
@@ -36,6 +37,7 @@ func newTestApp(t *testing.T) http.Handler {
 	routine.New(db, tmpl).RegisterRoutes(mux)
 	stats.New(db, tmpl).RegisterRoutes(mux)
 	config.New(db, tmpl).RegisterRoutes(mux)
+	alone.New(db, tmpl).RegisterRoutes(mux)
 	return mux
 }
 
@@ -126,6 +128,31 @@ func TestPhaseInvalidRejected(t *testing.T) {
 	w := post(t, app, "/api/phase", url.Values{"phase": {"invalid"}})
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("POST /api/phase invalid = %d, want 400", w.Code)
+	}
+}
+
+// Alone mode — start, mark, end.
+
+func TestAloneFlow(t *testing.T) {
+	app := newTestApp(t)
+
+	// Idle card renders.
+	if w := get(t, app, "/api/alone"); w.Code != http.StatusOK {
+		t.Fatalf("GET /api/alone (idle) = %d, want 200", w.Code)
+	}
+	// Start → active card mentions the marker controls.
+	w := post(t, app, "/api/alone/start", url.Values{})
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "End alone time") {
+		t.Fatalf("start alone = %d, body missing end button", w.Code)
+	}
+	// Log a marker.
+	if w := post(t, app, "/api/alone/marker", url.Values{"kind": {"asleep"}}); w.Code != http.StatusOK {
+		t.Errorf("marker asleep = %d, want 200", w.Code)
+	}
+	// End → back to idle with the session in recent history.
+	w = post(t, app, "/api/alone/end", url.Values{})
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "asleep") {
+		t.Errorf("end alone = %d, body missing recent summary", w.Code)
 	}
 }
 
