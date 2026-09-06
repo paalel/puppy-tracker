@@ -34,6 +34,7 @@ type StatsData struct {
 	SettleFactors      []SettleFactor
 	AccidentStats      *AccidentStats
 	PoopTimings        []PoopTiming
+	PoopDensitiesJSON  template.JS
 	TotalPoops         int
 	AccidentWeeklyJSON template.JS
 	TotalAccidents     int
@@ -87,6 +88,7 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		}
 		sd.TotalPoops = ta.TotalPoops
 		sd.PoopTimings = ta.Timings
+		sd.PoopDensitiesJSON = mustJSON(ta.Densities)
 		as, err := getAccidentStats(h.db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -33,9 +33,20 @@ type PoopTiming struct {
 	P75    float64 `json:"p75"`
 }
 
+// PoopDensity is a time-of-day probability curve for the Nth poop of the day.
+// Curve holds one density value per hour (0–23); the area under it (sum of the
+// values, each spanning a 1-hour bin) equals Probability — the chance that an
+// Nth poop happens on a given day.
+type PoopDensity struct {
+	Label       string    `json:"label"`
+	Probability float64   `json:"probability"` // 0–1
+	Curve       []float64 `json:"curve"`
+}
+
 type ToiletAnalytics struct {
 	TotalPoops int
 	Timings    []PoopTiming
+	Densities  []PoopDensity
 }
 
 type FloatPoint struct {
@@ -53,4 +64,3 @@ type SettleFactor struct {
 	N          int     // sessions that had the activity
 	DeltaMins  float64 // WithAvg − WithoutAvg
 }
-

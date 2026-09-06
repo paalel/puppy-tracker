@@ -130,6 +130,92 @@
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
+        {{/* ── Poop timing ───────────────────────────────────────────────────── */}}
+        {{if .PoopTimings}}
+        <div class="card p-4 mb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-3">Poop timing</p>
+
+            <div class="space-y-4">
+            {{range .PoopTimings}}
+            <div>
+                <div class="flex items-baseline justify-between mb-1.5">
+                    <span class="text-xs font-medium text-stone-600">{{.Label}} poop</span>
+                    <span class="text-xs text-stone-400">
+                        <span class="font-semibold text-stone-600">{{fmtHourFrac .Median}}</span>
+                        · {{fmtHourFrac .P25}}–{{fmtHourFrac .P75}}
+                    </span>
+                </div>
+                {{/* 5:00–22:00 track: grey baseline, IQR band, median tick */}}
+                <div class="relative h-2 rounded-full bg-stone-100">
+                    <div class="absolute top-0 h-2 rounded-full bg-amber-300"
+                         style="left:{{hourPct .P25}}%; width:{{hourSpanPct .P25 .P75}}%"></div>
+                    <div class="absolute top-[-2px] w-1 h-3 rounded-full bg-amber-600"
+                         style="left:calc({{hourPct .Median}}% - 2px)"></div>
+                </div>
+            </div>
+            {{end}}
+            </div>
+
+            {{/* Hour axis 5–21 */}}
+            <div class="relative h-4 mt-1">
+                <span class="absolute text-[10px] text-stone-300" style="left:0%">5</span>
+                <span class="absolute text-[10px] text-stone-300" style="left:calc({{hourPct 9}}% - 4px)">9</span>
+                <span class="absolute text-[10px] text-stone-300" style="left:calc({{hourPct 13}}% - 6px)">13</span>
+                <span class="absolute text-[10px] text-stone-300" style="left:calc({{hourPct 17}}% - 6px)">17</span>
+                <span class="absolute text-[10px] text-stone-300" style="right:0%">21</span>
+            </div>
+
+            <p class="text-xs text-stone-300 mt-2 text-center">{{.TotalPoops}} poops · median with typical range (25th–75th pct)</p>
+        </div>
+        {{end}}
+
+        {{/* ── Poop probability by time of day ──────────────────────────────────── */}}
+        {{if .PoopDensitiesJSON}}
+        <div class="card p-4 mb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Poop probability</p>
+            <p class="text-xs text-stone-300 mb-3">Area under each curve = chance that poop happens on a day</p>
+            <div style="position:relative;height:170px">
+                <canvas id="poopDensityChart"></canvas>
+            </div>
+        </div>
+        <script>
+        (function() {
+            var densities = {{.PoopDensitiesJSON}};
+            if (!densities || !densities.length) return;
+            var labels = ['00','01','02','03','04','05','06','07','08','09','10','11',
+                          '12','13','14','15','16','17','18','19','20','21','22','23'];
+            var colors = [
+                ['rgb(251,191,36)',  'rgba(251,191,36,0.15)'],  // amber  1st
+                ['rgb(139,92,246)',  'rgba(139,92,246,0.15)'],  // violet 2nd
+                ['rgb(20,184,166)',  'rgba(20,184,166,0.15)'],  // teal   3rd
+                ['rgb(244,63,94)',   'rgba(244,63,94,0.15)'],   // rose   4th
+            ];
+            var datasets = densities.map(function(d, i) {
+                var c = colors[i % colors.length];
+                return {
+                    label: d.label + ' (' + Math.round(d.probability * 100) + '%)',
+                    data: d.curve,
+                    borderColor: c[0], backgroundColor: c[1], fill: true,
+                    borderWidth: 2, pointRadius: 0, tension: 0.4,
+                };
+            });
+            new Chart(document.getElementById('poopDensityChart'), {
+                type: 'line',
+                data: { labels: labels, datasets: datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'bottom',
+                        labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 12 } },
+                        y: { display: false, beginAtZero: true },
+                    },
+                },
+            });
+        })();
+        </script>
+        {{end}}
+
         {{/* ── Accident streak ────────────────────────────────────────────────── */}}
         {{with .AccidentStats}}
         <div class="card px-5 py-3 mb-3">
@@ -225,45 +311,6 @@
             });
         })();
         </script>
-        {{end}}
-
-        {{/* ── Poop timing ───────────────────────────────────────────────────── */}}
-        {{if .PoopTimings}}
-        <div class="card p-4">
-            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-3">Poop timing</p>
-
-            <div class="space-y-4">
-            {{range .PoopTimings}}
-            <div>
-                <div class="flex items-baseline justify-between mb-1.5">
-                    <span class="text-xs font-medium text-stone-600">{{.Label}} poop</span>
-                    <span class="text-xs text-stone-400">
-                        <span class="font-semibold text-stone-600">{{fmtHourFrac .Median}}</span>
-                        · {{fmtHourFrac .P25}}–{{fmtHourFrac .P75}}
-                    </span>
-                </div>
-                {{/* 5:00–22:00 track: grey baseline, IQR band, median tick */}}
-                <div class="relative h-2 rounded-full bg-stone-100">
-                    <div class="absolute top-0 h-2 rounded-full bg-amber-300"
-                         style="left:{{hourPct .P25}}%; width:{{hourSpanPct .P25 .P75}}%"></div>
-                    <div class="absolute top-[-2px] w-1 h-3 rounded-full bg-amber-600"
-                         style="left:calc({{hourPct .Median}}% - 2px)"></div>
-                </div>
-            </div>
-            {{end}}
-            </div>
-
-            {{/* Hour axis 5–21 */}}
-            <div class="relative h-4 mt-1">
-                <span class="absolute text-[10px] text-stone-300" style="left:0%">5</span>
-                <span class="absolute text-[10px] text-stone-300" style="left:calc({{hourPct 9}}% - 4px)">9</span>
-                <span class="absolute text-[10px] text-stone-300" style="left:calc({{hourPct 13}}% - 6px)">13</span>
-                <span class="absolute text-[10px] text-stone-300" style="left:calc({{hourPct 17}}% - 6px)">17</span>
-                <span class="absolute text-[10px] text-stone-300" style="right:0%">21</span>
-            </div>
-
-            <p class="text-xs text-stone-300 mt-2 text-center">{{.TotalPoops}} poops · median with typical range (25th–75th pct)</p>
-        </div>
         {{end}}
 
         {{else}}

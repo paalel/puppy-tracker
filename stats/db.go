@@ -215,61 +215,146 @@ func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
 	return &AccidentStats{CurrentStreak: current, RecordStreak: record}, nil
 }
 
-// minTimingSamples is the fewest observations before a poop's timing is
-// summarised. Set so only regular daily poops appear: with ~77 tracked days
-// the 1st (72) and 2nd (55) poop clear it, while the occasional 3rd (7) and
-// 4th (1) are dropped — showing them would imply a routine that isn't there.
-const minTimingSamples = 10
+// minTimingSamples gates the median+IQR bars (need a few points for a stable
+// quartile); minDensitySamples gates the probability curves, which stay honest
+// at lower n because their area shrinks with how rarely the poop happens. With
+// ~77 tracked days this shows the 1st/2nd/3rd poop; the 4th (1 sample) is still
+// dropped until it recurs.
+const (
+	minTimingSamples  = 5
+	minDensitySamples = 3
+)
 
 // getToiletAnalytics groups poops by their ordinal within each day (1st, 2nd, …)
 // and summarises each ordinal's timing as median + interquartile range. Ordinals
 // with fewer than minTimingSamples observations are dropped rather than shown noisily.
 func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
+	// Select raw UTC timestamps and convert to local time in Go — SQLite's
+	// 'localtime' modifier uses the server's zone (UTC on Fly), which would
+	// show poop times two hours early. store.ParseTimestamp + .Local() is the
+	// same path the rest of the app uses for correct Norwegian time.
 	rows, err := db.Query(`
-		SELECT
-			ROW_NUMBER() OVER (PARTITION BY date ORDER BY woke_at) AS ordinal,
-			CAST(strftime('%H', woke_at, 'localtime') AS REAL) +
-			CAST(strftime('%M', woke_at, 'localtime') AS REAL) / 60.0 AS hour_frac
-		FROM sessions
-		WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
-		ORDER BY ordinal
+		SELECT date, woke_at FROM sessions
+		WHERE toilet_poop = 1 AND woke_at IS NOT NULL
+		  AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
+		ORDER BY woke_at ASC
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	byOrdinal := map[int][]float64{}
+	// Group poop times (as local fractional hours) by day, preserving order so
+	// each day's slice is already sorted; the index within a day is its ordinal.
+	perDay := map[string][]float64{}
 	total := 0
 	for rows.Next() {
-		var ordinal int
-		var hourFrac float64
-		if err := rows.Scan(&ordinal, &hourFrac); err != nil {
+		var date, wokeRaw string
+		if err := rows.Scan(&date, &wokeRaw); err != nil {
 			return nil, err
 		}
-		byOrdinal[ordinal] = append(byOrdinal[ordinal], hourFrac)
+		t, err := parseTimestamp(wokeRaw)
+		if err != nil {
+			continue
+		}
+		lt := t.Local()
+		perDay[date] = append(perDay[date], float64(lt.Hour())+float64(lt.Minute())/60.0)
 		total++
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
+	byOrdinal := map[int][]float64{}
+	for _, times := range perDay {
+		for i, hf := range times {
+			byOrdinal[i+1] = append(byOrdinal[i+1], hf)
+		}
+	}
+
+	totalDays, err := countTrackedDays(db)
+	if err != nil {
+		return nil, err
+	}
+
 	ta := &ToiletAnalytics{TotalPoops: total}
 	for ordinal := 1; ; ordinal++ {
 		times, ok := byOrdinal[ordinal]
-		if !ok || len(times) < minTimingSamples {
+		if !ok || len(times) < minDensitySamples {
 			break
 		}
-		sort.Float64s(times)
-		ta.Timings = append(ta.Timings, PoopTiming{
-			Label:  ordinalLabel(ordinal),
-			Count:  len(times),
-			Median: percentile(times, 0.5),
-			P25:    percentile(times, 0.25),
-			P75:    percentile(times, 0.75),
+		// Median + IQR bars need a few more points to be stable than a density.
+		if len(times) >= minTimingSamples {
+			sorted := append([]float64(nil), times...)
+			sort.Float64s(sorted)
+			ta.Timings = append(ta.Timings, PoopTiming{
+				Label:  ordinalLabel(ordinal),
+				Count:  len(sorted),
+				Median: percentile(sorted, 0.5),
+				P25:    percentile(sorted, 0.25),
+				P75:    percentile(sorted, 0.75),
+			})
+		}
+		// Density curve scaled so its area equals P(this poop happens on a day).
+		prob := 0.0
+		if totalDays > 0 {
+			prob = float64(len(times)) / float64(totalDays)
+		}
+		ta.Densities = append(ta.Densities, PoopDensity{
+			Label:       ordinalLabel(ordinal),
+			Probability: math.Round(prob*100) / 100,
+			Curve:       scaledKDE(times, prob),
 		})
 	}
 	return ta, nil
+}
+
+// countTrackedDays counts distinct days with at least one session that counts
+// toward stats (not excluded, not alone) — the denominator for poop probability.
+func countTrackedDays(db *sql.DB) (int, error) {
+	var n int
+	err := db.QueryRow(
+		`SELECT COUNT(DISTINCT date) FROM sessions WHERE COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0`,
+	).Scan(&n)
+	return n, err
+}
+
+// scaledKDE returns a 24-point circular Gaussian KDE of the given local hours,
+// normalised so the sum of the values (each a 1-hour bin) equals area.
+func scaledKDE(times []float64, area float64) []float64 {
+	kde := computeCircularKDE(times)
+	sum := 0.0
+	for _, v := range kde {
+		sum += v
+	}
+	if sum == 0 {
+		return kde
+	}
+	out := make([]float64, len(kde))
+	for i, v := range kde {
+		out[i] = math.Round(v/sum*area*1000) / 1000
+	}
+	return out
+}
+
+// computeCircularKDE evaluates a Gaussian KDE at the midpoint of each hour,
+// wrapping around midnight so 23:30 and 00:30 are treated as close.
+func computeCircularKDE(times []float64) []float64 {
+	const bandwidth = 1.2
+	result := make([]float64, 24)
+	for h := 0; h < 24; h++ {
+		x := float64(h) + 0.5
+		for _, t := range times {
+			d := x - t
+			if d > 12 {
+				d -= 24
+			} else if d < -12 {
+				d += 24
+			}
+			result[h] += math.Exp(-0.5 * d * d / (bandwidth * bandwidth))
+		}
+	}
+	return result
 }
 
 func ordinalLabel(n int) string {
