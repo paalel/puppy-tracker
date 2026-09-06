@@ -50,13 +50,19 @@ func initDB(db *sql.DB) error {
 }
 
 func runMigration(db *sql.DB, sql string) error {
-	for _, stmt := range strings.Split(sql, ";") {
+	// Statements are split on ';', so strip full-line '--' comments first —
+	// otherwise a semicolon inside comment prose would split mid-comment.
+	for _, stmt := range strings.Split(stripLineComments(sql), ";") {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue
 		}
 		if _, err := db.Exec(stmt); err != nil {
-			if strings.Contains(err.Error(), "duplicate column name") {
+			// Migrations re-run on every boot, so tolerate errors that just mean
+			// "already applied": a re-added column, or a re-dropped column.
+			msg := err.Error()
+			if strings.Contains(msg, "duplicate column name") ||
+				strings.Contains(msg, "no such column") {
 				continue
 			}
 			snippet := stmt
@@ -67,6 +73,21 @@ func runMigration(db *sql.DB, sql string) error {
 		}
 	}
 	return nil
+}
+
+// stripLineComments removes lines whose first non-space content is '--'.
+// Inline trailing comments are left alone (SQLite parses them fine); only
+// full-line comments are dropped, before the ';' split.
+func stripLineComments(sql string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(sql, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "--") {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func main() {
