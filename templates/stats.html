@@ -255,6 +255,40 @@
         </script>
         {{end}}
 
+        {{/* ── Pees per week ──────────────────────────────────────────────────── */}}
+        {{if .PeeWeeklyJSON}}
+        <div class="card p-4 mb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Pees per day</p>
+            <p class="text-xs text-stone-300 mb-3">Weekly average · non-excluded days only</p>
+            <div style="position:relative;height:130px">
+                <canvas id="peeWeeklyChart"></canvas>
+            </div>
+        </div>
+        <script>
+        (function() {
+            var pw = {{.PeeWeeklyJSON}};
+            new Chart(document.getElementById('peeWeeklyChart'), {
+                type: 'bar',
+                data: {
+                    labels: pw.map(function(p) { return p.x; }),
+                    datasets: [{ data: pw.map(function(p) { return p.y; }),
+                        backgroundColor: 'rgba(14,165,233,0.45)',
+                        borderColor: 'rgb(14,165,233)', borderWidth: 1 }],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' },
+                             ticks: { font: { size: 10 }, stepSize: 1 } },
+                    },
+                },
+            });
+        })();
+        </script>
+        {{end}}
+
         {{/* ── Poop distribution ─────────────────────────────────────────────── */}}
         <div class="card p-4">
             <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-1">Poop distribution</p>

@@ -39,3 +39,8 @@ type ToiletAnalytics struct {
 	KDE        []float64
 }
 
+type FloatPoint struct {
+	X string  `json:"x"`
+	Y float64 `json:"y"`
+}
+

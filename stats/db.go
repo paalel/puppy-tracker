@@ -2,6 +2,7 @@ package stats
 
 import (
 	"database/sql"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -404,37 +405,129 @@ func computeCircularKDE(times []float64) []float64 {
 	return result
 }
 
-// getAccidentWeekly returns accident counts grouped by calendar week (Monday-based),
-// formatted as chart points with short date labels.
-func getAccidentWeekly(db *sql.DB) ([]ChartPoint, error) {
+// getPeeWeekly returns average pees per tracked (non-excluded) day, one point per week
+// since tracking began, labelled by the puppy's age in weeks.
+func getPeeWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 	rows, err := db.Query(`
-		SELECT
-			date(woke_at, '-' || ((cast(strftime('%w', woke_at) as integer) + 6) % 7) || ' days') AS week_mon,
-			COUNT(*) AS accidents
-		FROM sessions
-		WHERE toilet_accident = 1
-		GROUP BY week_mon
-		ORDER BY week_mon
+		SELECT date, SUM(toilet_pee) FROM sessions
+		WHERE COALESCE(excluded, 0) = 0
+		GROUP BY date ORDER BY date
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var pts []ChartPoint
+	type dayPee struct {
+		date string
+		pees int
+	}
+	var days []dayPee
 	for rows.Next() {
-		var weekStr string
-		var count int
-		if err := rows.Scan(&weekStr, &count); err != nil {
+		var date string
+		var pees int
+		if err := rows.Scan(&date, &pees); err != nil {
 			return nil, err
 		}
-		t, err := time.Parse("2006-01-02", weekStr)
+		days = append(days, dayPee{date, pees})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	ageWeek := func(t time.Time) int {
+		if birthdate != nil {
+			return int(t.Sub(*birthdate).Hours() / (24 * 7))
+		}
+		return 0
+	}
+
+	type weekAgg struct{ pees, tracked int }
+	weekMap := make(map[int]*weekAgg)
+	firstWeek, lastWeek := 9999, -1
+	for _, d := range days {
+		t, err := time.Parse("2006-01-02", d.date)
 		if err != nil {
 			continue
 		}
-		pts = append(pts, ChartPoint{X: t.Format("Jan 2"), Y: count})
+		w := ageWeek(t)
+		if weekMap[w] == nil {
+			weekMap[w] = &weekAgg{}
+		}
+		weekMap[w].pees += d.pees
+		weekMap[w].tracked++
+		if w < firstWeek {
+			firstWeek = w
+		}
+		if w > lastWeek {
+			lastWeek = w
+		}
 	}
-	return pts, rows.Err()
+	if len(weekMap) == 0 {
+		return nil, nil
+	}
+
+	pts := make([]FloatPoint, 0, lastWeek-firstWeek+1)
+	for w := firstWeek; w <= lastWeek; w++ {
+		label := fmt.Sprintf("Wk %d", w)
+		if agg, ok := weekMap[w]; ok && agg.tracked > 0 {
+			avg := math.Round(float64(agg.pees)/float64(agg.tracked)*10) / 10
+			pts = append(pts, FloatPoint{X: label, Y: avg})
+		} else {
+			pts = append(pts, FloatPoint{X: label, Y: 0})
+		}
+	}
+	return pts, nil
+}
+
+// getAccidentWeekly returns one ChartPoint per week since tracking began,
+// labelled by the puppy's age in weeks ("Wk 8", "Wk 9", …).
+// Weeks with no accidents are included as Y=0 so the trend is visible.
+func getAccidentWeekly(db *sql.DB, birthdate *time.Time) ([]ChartPoint, error) {
+	var firstStr sql.NullString
+	if err := db.QueryRow(`SELECT MIN(woke_at) FROM sessions WHERE excluded=0`).Scan(&firstStr); err != nil || !firstStr.Valid {
+		return nil, err
+	}
+	firstTime, err := parseTimestamp(firstStr.String)
+	if err != nil {
+		return nil, err
+	}
+
+	// ageWeek returns completed weeks of age at time t.
+	ageWeek := func(t time.Time) int {
+		if birthdate != nil {
+			return int(t.Sub(*birthdate).Hours() / (24 * 7))
+		}
+		return int(t.Sub(firstTime).Hours() / (24 * 7))
+	}
+
+	rows, err := db.Query(`SELECT woke_at FROM sessions WHERE toilet_accident = 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	accByWeek := make(map[int]int)
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		if t, err := parseTimestamp(s); err == nil {
+			accByWeek[ageWeek(t)]++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	first := ageWeek(firstTime)
+	current := ageWeek(time.Now())
+	pts := make([]ChartPoint, 0, current-first+1)
+	for w := first; w <= current; w++ {
+		pts = append(pts, ChartPoint{X: fmt.Sprintf("Wk %d", w), Y: accByWeek[w]})
+	}
+	return pts, nil
 }
 
 func queryDateMins(db *sql.DB, query string) (map[string]int, error) {
