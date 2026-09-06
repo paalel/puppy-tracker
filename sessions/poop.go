@@ -13,6 +13,12 @@ const (
 	l2Lambda    = 1.0 // L2 penalty on non-intercept coefficients
 	irlsMaxIter = 50
 	irlsTol     = 1e-8
+
+	// recencyHalfLifeDays sets how fast old sessions fade: an observation this
+	// many days older than the latest carries half the influence. All data is
+	// still used, but recent behaviour dominates so the model tracks her as she
+	// matures. Consumed in loadTrainingData.
+	recencyHalfLifeDays = 28
 )
 
 // PoopPredictor fits logistic regression P(poop | hour_of_day, hours_since_poop)
@@ -106,11 +112,18 @@ func fitLogistic(data []trainRow) ([]float64, *mat.Dense, error) {
 
 	Xdata := make([]float64, n*p)
 	y := make([]float64, n)
+	rw := make([]float64, n) // per-observation recency weight
 	for i, row := range data {
 		fv := featureVec(row.localHour, row.hoursSincePoop)
 		copy(Xdata[i*p:], fv)
 		if row.poop {
 			y[i] = 1
+		}
+		// A non-positive weight means "unweighted" (used by synthetic tests).
+		if row.weight > 0 {
+			rw[i] = row.weight
+		} else {
+			rw[i] = 1
 		}
 	}
 	X := mat.NewDense(n, p, Xdata)
@@ -129,12 +142,13 @@ func fitLogistic(data []trainRow) ([]float64, *mat.Dense, error) {
 			mu[i] = sigmoid(z)
 		}
 
-		// H = XᵀWX + λI (skip λ for intercept), g = Xᵀ(y−μ) − λβ
+		// Recency-weighted IRLS: each observation's data contribution is scaled by
+		// rw[i]. H = Xᵀ(rw·W)X + λI (skip λ for intercept), g = Xᵀ(rw·(y−μ)) − λβ.
 		H := mat.NewDense(p, p, nil)
 		g := make([]float64, p)
 		for i := range n {
-			wi := math.Max(mu[i]*(1-mu[i]), 1e-10)
-			resid := y[i] - mu[i]
+			wi := rw[i] * math.Max(mu[i]*(1-mu[i]), 1e-10)
+			resid := rw[i] * (y[i] - mu[i])
 			for j := range p {
 				g[j] += X.At(i, j) * resid
 				for k := range p {

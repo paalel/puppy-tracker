@@ -3,6 +3,7 @@ package sessions
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"time"
 
 	"puppy/store"
@@ -438,6 +439,7 @@ type trainRow struct {
 	localHour      int
 	hoursSincePoop float64
 	poop           bool
+	weight         float64 // recency weight; higher = more recent, more influential
 }
 
 // loadTrainingData generates one observation per clock-hour slot within each
@@ -504,8 +506,24 @@ func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 		return nil, err
 	}
 
+	// Reference "now" for recency = the most recent session (rows are ordered by
+	// woke_at ASC). Weighting relative to the latest data — rather than the wall
+	// clock — keeps the newest observations at full weight and stays stable when
+	// no new sessions have been logged.
+	var ref time.Time
+	for _, s := range sessions {
+		if s.wokeAt.After(ref) {
+			ref = s.wokeAt
+		}
+	}
+
 	var data []trainRow
 	for _, s := range sessions {
+		// Exponential decay: a session halves in influence every
+		// recencyHalfLifeDays. Old data still counts, just less.
+		ageDays := ref.Sub(s.wokeAt).Hours() / 24
+		weight := math.Exp2(-ageDays / recencyHalfLifeDays)
+
 		slotStart := s.wokeAt
 		for slotStart.Before(s.endAt) {
 			nextBoundary := slotStart.UTC().Truncate(time.Hour).Add(time.Hour)
@@ -520,6 +538,7 @@ func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 					localHour:      slotStart.Local().Hour(),
 					hoursSincePoop: hsp,
 					poop:           isLast && s.poop,
+					weight:         weight,
 				})
 			}
 			slotStart = slotEnd

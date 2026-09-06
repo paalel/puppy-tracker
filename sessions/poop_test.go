@@ -62,7 +62,10 @@ func TestPredictOutputsAreValid(t *testing.T) {
 	}
 	pred := &PoopPredictor{beta: beta, covBeta: cov}
 
-	cases := []struct{ utcHour int; hours float64 }{
+	cases := []struct {
+		utcHour int
+		hours   float64
+	}{
 		{7, 1},
 		{9, 4},
 		{9, 12},
@@ -100,6 +103,38 @@ func TestPredictUrgencyIsMonotone(t *testing.T) {
 			t.Errorf("P(poop|%gh) = %f < P(poop|prev) = %f — urgency not monotone", h, mid, prev)
 		}
 		prev = mid
+	}
+}
+
+// TestFitLogisticRecencyWeighting checks that down-weighting old observations
+// pulls the fit toward the recent signal. Old data says "high urgency, no poop";
+// recent data says "high urgency, poop". With old data down-weighted, the
+// predicted P(poop) at that point must rise toward the recent behaviour.
+func TestFitLogisticRecencyWeighting(t *testing.T) {
+	predictAt := func(oldWeight float64) float64 {
+		var data []trainRow
+		for i := 0; i < 12; i++ { // low-urgency baseline, no poop
+			data = append(data, trainRow{localHour: 9, hoursSincePoop: 2, poop: false, weight: 1})
+		}
+		for i := 0; i < 10; i++ { // old: high urgency, did NOT poop
+			data = append(data, trainRow{localHour: 9, hoursSincePoop: 12, poop: false, weight: oldWeight})
+		}
+		for i := 0; i < 10; i++ { // recent: high urgency, DID poop
+			data = append(data, trainRow{localHour: 9, hoursSincePoop: 12, poop: true, weight: 1})
+		}
+		beta, cov, err := fitLogistic(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mid, _, _ := (&PoopPredictor{beta: beta, covBeta: cov}).Predict(9, 12)
+		return mid
+	}
+
+	equalWeight := predictAt(1.0)    // old counts fully
+	recencyWeight := predictAt(0.05) // old down-weighted
+	if recencyWeight <= equalWeight {
+		t.Errorf("recency-weighted P(poop) = %.3f should exceed equal-weight P = %.3f",
+			recencyWeight, equalWeight)
 	}
 }
 
