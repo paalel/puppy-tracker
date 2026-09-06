@@ -31,6 +31,7 @@ type StatsData struct {
 	Tab                string
 	TotalSleepJSON     template.JS
 	SettleWeeklyJSON   template.JS
+	SettleFactors      []SettleFactor
 	AccidentStats      *AccidentStats
 	PoopTimings        []PoopTiming
 	TotalPoops         int
@@ -70,6 +71,13 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sd.SettleWeeklyJSON = mustJSON(settleWeekly)
+
+		factors, err := getSettleByActivity(h.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.SettleFactors = factors
 
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)

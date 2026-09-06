@@ -107,6 +107,25 @@
         })();
         </script>
 
+        {{/* ── What helps her settle ───────────────────────────────────────────── */}}
+        {{if .SettleFactors}}
+        <div class="card p-4 mb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">What helps her settle</p>
+            <p class="text-xs text-stone-300 mb-3">Settle time when the awake window included each activity, vs when it didn't</p>
+            <div class="space-y-2.5">
+            {{range .SettleFactors}}
+            <div class="flex items-baseline justify-between gap-3">
+                <span class="text-sm text-stone-600">{{.Label}}</span>
+                <span class="flex items-baseline gap-2">
+                    <span class="text-xs text-stone-300">{{.WithAvg}}m vs {{.WithoutAvg}}m · n={{.N}}</span>
+                    <span class="text-xs font-medium {{settleDeltaClass .DeltaMins}}">{{settleDelta .DeltaMins}}</span>
+                </span>
+            </div>
+            {{end}}
+            </div>
+        </div>
+        {{end}}
+
         {{else if eq .Tab "toilet"}}
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

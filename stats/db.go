@@ -375,6 +375,72 @@ func getPeeWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 	return pts, nil
 }
 
+// minFactorSamples is the fewest with-activity sessions before a settle factor
+// is reported — below this the average is too noisy to compare.
+const minFactorSamples = 8
+
+// getSettleByActivity measures how each awake-window activity relates to settle
+// time. For every activity flag it compares the mean settle of sessions that had
+// it against those that didn't, sorted most-helpful (largest speed-up) first.
+func getSettleByActivity(db *sql.DB) ([]SettleFactor, error) {
+	rows, err := db.Query(`
+		SELECT CAST(strftime('%s', slept_at) - strftime('%s', crate_at) AS REAL) / 60.0,
+		       physical_activity, mental_activity, environmental_activity, calm_winddown
+		FROM sessions
+		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL
+		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type acc struct {
+		withSum, withoutSum float64
+		withN, withoutN     int
+	}
+	labels := []string{"Physical", "Mental", "Environmental", "Calm wind-down"}
+	accs := make([]acc, len(labels))
+
+	for rows.Next() {
+		var settle float64
+		flags := make([]int, len(labels))
+		if err := rows.Scan(&settle, &flags[0], &flags[1], &flags[2], &flags[3]); err != nil {
+			return nil, err
+		}
+		for i, on := range flags {
+			if on == 1 {
+				accs[i].withSum += settle
+				accs[i].withN++
+			} else {
+				accs[i].withoutSum += settle
+				accs[i].withoutN++
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var factors []SettleFactor
+	for i, a := range accs {
+		if a.withN < minFactorSamples || a.withoutN == 0 {
+			continue
+		}
+		withAvg := a.withSum / float64(a.withN)
+		withoutAvg := a.withoutSum / float64(a.withoutN)
+		factors = append(factors, SettleFactor{
+			Label:      labels[i],
+			WithAvg:    math.Round(withAvg*10) / 10,
+			WithoutAvg: math.Round(withoutAvg*10) / 10,
+			N:          a.withN,
+			DeltaMins:  math.Round((withAvg-withoutAvg)*10) / 10,
+		})
+	}
+	sort.Slice(factors, func(i, j int) bool { return factors[i].DeltaMins < factors[j].DeltaMins })
+	return factors, nil
+}
+
 // getSettleWeekly returns average settle time (crate→sleep) per week, labelled by age week.
 func getSettleWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 	rows, err := db.Query(`

@@ -43,3 +43,14 @@ type FloatPoint struct {
 	Y float64 `json:"y"`
 }
 
+// SettleFactor compares average settle time (crate→sleep) for sessions whose
+// preceding awake window included a given activity vs those that didn't.
+// DeltaMins < 0 means that activity is associated with settling faster.
+type SettleFactor struct {
+	Label      string
+	WithAvg    float64
+	WithoutAvg float64
+	N          int     // sessions that had the activity
+	DeltaMins  float64 // WithAvg − WithoutAvg
+}
+
