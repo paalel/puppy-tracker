@@ -177,76 +177,22 @@ func buildPastSchedule(dbSessions []dbSession, routineSessions []routine.Routine
 
 	views := make([]SessionView, 0, len(dbSessions))
 	for i, s := range dbSessions {
-		var aw, ac, as *time.Time
-		if s.WokeAt != nil {
-			t := s.WokeAt.Local()
-			aw = &t
-		}
-		if s.CrateAt != nil {
-			t := s.CrateAt.Local()
-			ac = &t
-		}
-		if s.SleptAt != nil {
-			t := s.SleptAt.Local()
-			as = &t
-		}
-
-		label := "Session"
+		v := sessionViewFromDB(s)
+		v.Index = i
+		v.Label = "Session"
 		if s.RoutineSessionID != nil {
 			if l, ok := labelByID[*s.RoutineSessionID]; ok {
-				label = l
+				v.Label = l
 			}
 		}
-
-		var actualDuration, durationClass string
-		if aw != nil && as != nil {
-			dur := as.Sub(*aw)
-			actualDuration = formatDuration(dur)
-			durationClass = "text-stone-400"
+		// Past days grey the duration rather than colour-coding against target.
+		if v.ActualDuration != "" {
+			v.DurationClass = "text-stone-400"
 		}
-		var settleDuration string
-		if ac != nil && as != nil {
-			if d := as.Sub(*ac); d > 0 {
-				settleDuration = formatDuration(d)
-			}
-		}
-
-		views = append(views, SessionView{
-			ID:                    s.ID,
-			Index:                 i,
-			Label:                 label,
-			ActualWake:            aw,
-			ActualCrate:           ac,
-			ActualSleep:           as,
-			IsPast:                as != nil,
-			IsActive:              aw != nil && as == nil,
-			ActualDuration:        actualDuration,
-			DurationClass:         durationClass,
-			SettleDuration:        settleDuration,
-			Comment:               s.Comment,
-			SleepEase:             s.SleepEase,
-			Overtired:             s.Overtired,
-			ToiletPee:             s.ToiletPee,
-			ToiletPoop:            s.ToiletPoop,
-			ToiletAccident:        s.ToiletAccident,
-			TrainingQuality:       s.TrainingQuality,
-			PhysicalActivity:      s.PhysicalActivity,
-			MentalActivity:        s.MentalActivity,
-			CalmWinddown:          s.CalmWinddown,
-			EnvironmentalActivity: s.EnvironmentalActivity,
-			Excluded:              s.Excluded,
-		})
+		views = append(views, v)
 	}
 
-	for i := 0; i < len(views)-1; i++ {
-		if views[i].ActualSleep != nil && views[i+1].ActualWake != nil {
-			d := views[i+1].ActualWake.Sub(*views[i].ActualSleep)
-			if d > 0 {
-				views[i+1].SleepDuration = formatDuration(d)
-			}
-		}
-	}
-
+	linkNaps(views)
 	return views
 }
 
@@ -273,124 +219,49 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 	views := make([]SessionView, len(routineSessions))
 
 	for i, rs := range routineSessions {
-		var dbSess *dbSession
+		var v SessionView
 		if s, ok := dbByRoutineID[rs.ID]; ok {
-			dbSess = &s
+			v = sessionViewFromDB(s)
 			consumedDBIDs[s.ID] = true
 		}
+		v.Index = i
+		v.Position = rs.Position
+		v.Label = rs.Label
+		v.Activities = rs.Activities
+		// A routine slot with no matching row yet is a future session; the zero
+		// value leaves IsFuture false, so classify explicitly here.
+		v.IsPast = v.ActualSleep != nil
+		v.IsActive = v.ActualWake != nil && v.ActualSleep == nil
+		v.IsFuture = v.ActualWake == nil
 
+		// Planned wake baseline: first slot from the configured wake time, later
+		// slots cascade from the previous slot's actual (or, if unknown, planned)
+		// sleep, so a long-running session pushes the rest of the day back.
 		var plannedWake time.Time
 		if i == 0 {
-			if dbSess != nil && dbSess.WokeAt != nil {
-				plannedWake = dbSess.WokeAt.Local()
-			} else {
-				h, m := parseHHMM(cfg.FirstWakeTime)
-				plannedWake = today.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute)
-			}
+			h, m := parseHHMM(cfg.FirstWakeTime)
+			plannedWake = today.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute)
 		} else {
 			prev := views[i-1]
-			var base time.Time
+			base := prev.PlannedSleep
 			if prev.ActualSleep != nil {
-				base = prev.ActualSleep.Local()
-			} else {
-				base = prev.PlannedSleep
+				base = *prev.ActualSleep
 			}
 			plannedWake = base.Add(nap)
 		}
-
-		var aw, as *time.Time
-		if dbSess != nil {
-			aw = dbSess.WokeAt
-			as = dbSess.SleptAt
-		}
-
-		var actualDuration, durationClass string
-		if aw != nil && as != nil {
-			dur := as.Sub(*aw)
-			actualDuration = formatDuration(dur)
-			diff := dur - awake
-			if diff < 0 {
-				diff = -diff
-			}
-			diffMins := diff.Minutes()
-			switch {
-			case diffMins < 10:
-				durationClass = "text-emerald-600"
-			case diffMins < 20:
-				durationClass = "text-amber-500"
-			default:
-				durationClass = "text-rose-500"
-			}
-		}
-
-		var id int
-		var comment, sleepEase, trainingQuality string
-		var overtired, toiletPee, toiletPoop, toiletAccident bool
-		var physicalActivity, mentalActivity, calmWinddown, environmentalActivity, excluded bool
-		var ac *time.Time
-		if dbSess != nil {
-			id = dbSess.ID
-			comment = dbSess.Comment
-			sleepEase = dbSess.SleepEase
-			overtired = dbSess.Overtired
-			toiletPee = dbSess.ToiletPee
-			toiletPoop = dbSess.ToiletPoop
-			toiletAccident = dbSess.ToiletAccident
-			trainingQuality = dbSess.TrainingQuality
-			physicalActivity = dbSess.PhysicalActivity
-			mentalActivity = dbSess.MentalActivity
-			calmWinddown = dbSess.CalmWinddown
-			environmentalActivity = dbSess.EnvironmentalActivity
-			excluded = dbSess.Excluded
-			ac = dbSess.CrateAt
-		}
-
-		var settleDuration string
-		if ac != nil && as != nil {
-			if d := as.Sub(*ac); d > 0 {
-				settleDuration = formatDuration(d)
-			}
-		}
-
-		// PlannedSleep is the expected sleep time based on when the puppy actually
-		// woke up (if known), so the cascade to future sessions stays accurate even
-		// when a session ran long (e.g. vet visit).
+		// Once she's actually awake, the real wake time drives both ends.
 		plannedSleep := plannedWake.Add(awake)
-		if aw != nil {
-			plannedWake = aw.Local()
-			plannedSleep = aw.Local().Add(awake)
+		if v.ActualWake != nil {
+			plannedWake = *v.ActualWake
+			plannedSleep = v.ActualWake.Add(awake)
 		}
+		v.PlannedWake = plannedWake
+		v.PlannedSleep = plannedSleep
 
-		views[i] = SessionView{
-			ID:                    id,
-			Index:                 i,
-			Position:              rs.Position,
-			Label:                 rs.Label,
-			Activities:            rs.Activities,
-			PlannedWake:           plannedWake,
-			PlannedSleep:          plannedSleep,
-			ActualWake:            aw,
-			ActualCrate:           ac,
-			ActualSleep:           as,
-			IsPast:                as != nil,
-			IsActive:              aw != nil && as == nil,
-			IsFuture:              aw == nil,
-			ActualDuration:        actualDuration,
-			DurationClass:         durationClass,
-			Comment:               comment,
-			SleepEase:             sleepEase,
-			Overtired:             overtired,
-			ToiletPee:             toiletPee,
-			ToiletPoop:            toiletPoop,
-			ToiletAccident:        toiletAccident,
-			TrainingQuality:       trainingQuality,
-			PhysicalActivity:      physicalActivity,
-			MentalActivity:        mentalActivity,
-			CalmWinddown:          calmWinddown,
-			EnvironmentalActivity: environmentalActivity,
-			SettleDuration:        settleDuration,
-			Excluded:              excluded,
+		if v.ActualWake != nil && v.ActualSleep != nil {
+			v.DurationClass = durationClass(v.ActualSleep.Sub(*v.ActualWake), awake)
 		}
+		views[i] = v
 	}
 
 	// Append any DB sessions that weren't matched to a routine slot.
@@ -398,77 +269,15 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 		if consumedDBIDs[s.ID] {
 			continue
 		}
-		var aw, ac, as *time.Time
-		if s.WokeAt != nil {
-			t := s.WokeAt.Local()
-			aw = &t
+		v := sessionViewFromDB(s)
+		v.Index = len(views)
+		if v.ActualWake != nil && v.ActualSleep != nil {
+			v.DurationClass = durationClass(v.ActualSleep.Sub(*v.ActualWake), awake)
 		}
-		if s.CrateAt != nil {
-			t := s.CrateAt.Local()
-			ac = &t
-		}
-		if s.SleptAt != nil {
-			t := s.SleptAt.Local()
-			as = &t
-		}
-		var actualDuration, durationClass, settleDuration string
-		if aw != nil && as != nil {
-			dur := as.Sub(*aw)
-			actualDuration = formatDuration(dur)
-			diff := dur - awake
-			if diff < 0 {
-				diff = -diff
-			}
-			switch {
-			case diff.Minutes() < 10:
-				durationClass = "text-emerald-600"
-			case diff.Minutes() < 20:
-				durationClass = "text-amber-500"
-			default:
-				durationClass = "text-rose-500"
-			}
-		}
-		if ac != nil && as != nil {
-			if d := as.Sub(*ac); d > 0 {
-				settleDuration = formatDuration(d)
-			}
-		}
-		views = append(views, SessionView{
-			ID:                    s.ID,
-			Index:                 len(views),
-			IsPast:                as != nil,
-			IsActive:              aw != nil && as == nil,
-			IsFuture:              aw == nil,
-			ActualWake:            aw,
-			ActualCrate:           ac,
-			ActualSleep:           as,
-			ActualDuration:        actualDuration,
-			DurationClass:         durationClass,
-			SettleDuration:        settleDuration,
-			Comment:               s.Comment,
-			SleepEase:             s.SleepEase,
-			Overtired:             s.Overtired,
-			ToiletPee:             s.ToiletPee,
-			ToiletPoop:            s.ToiletPoop,
-			ToiletAccident:        s.ToiletAccident,
-			TrainingQuality:       s.TrainingQuality,
-			PhysicalActivity:      s.PhysicalActivity,
-			MentalActivity:        s.MentalActivity,
-			CalmWinddown:          s.CalmWinddown,
-			EnvironmentalActivity: s.EnvironmentalActivity,
-			Excluded:              s.Excluded,
-		})
+		views = append(views, v)
 	}
 
-	for i := 0; i < len(views)-1; i++ {
-		if views[i].ActualSleep != nil && views[i+1].ActualWake != nil {
-			d := views[i+1].ActualWake.Sub(*views[i].ActualSleep)
-			if d > 0 {
-				views[i+1].SleepDuration = formatDuration(d)
-			}
-		}
-	}
-
+	linkNaps(views)
 	return views
 }
 
@@ -488,4 +297,86 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh %dm", h, m)
 	}
 	return fmt.Sprintf("%dm", m)
+}
+
+// localize returns t in local time, preserving nil.
+func localize(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	lt := t.Local()
+	return &lt
+}
+
+// durationClass colour-codes how far an awake window's actual length strays from
+// the target: green when close, amber when off, rose when far.
+func durationClass(actual, target time.Duration) string {
+	diff := actual - target
+	if diff < 0 {
+		diff = -diff
+	}
+	switch {
+	case diff.Minutes() < 10:
+		return "text-emerald-600"
+	case diff.Minutes() < 20:
+		return "text-amber-500"
+	default:
+		return "text-rose-500"
+	}
+}
+
+// settleDur is the crate→sleep duration, or "" if either bound is missing/invalid.
+func settleDur(crate, sleep *time.Time) string {
+	if crate != nil && sleep != nil {
+		if d := sleep.Sub(*crate); d > 0 {
+			return formatDuration(d)
+		}
+	}
+	return ""
+}
+
+// linkNaps fills each session's SleepDuration from the gap between the previous
+// session's sleep and this session's wake.
+func linkNaps(views []SessionView) {
+	for i := 0; i < len(views)-1; i++ {
+		if views[i].ActualSleep != nil && views[i+1].ActualWake != nil {
+			if d := views[i+1].ActualWake.Sub(*views[i].ActualSleep); d > 0 {
+				views[i+1].SleepDuration = formatDuration(d)
+			}
+		}
+	}
+}
+
+// sessionViewFromDB fills the fields of a SessionView that derive purely from a
+// stored row: localized times, phase classification, pass-through flags, and the
+// actual awake + settle durations. Schedule-specific fields (Label, Index, planned
+// times, DurationClass) are left for the caller.
+func sessionViewFromDB(s dbSession) SessionView {
+	aw, ac, as := localize(s.WokeAt), localize(s.CrateAt), localize(s.SleptAt)
+	v := SessionView{
+		ID:                    s.ID,
+		ActualWake:            aw,
+		ActualCrate:           ac,
+		ActualSleep:           as,
+		IsPast:                as != nil,
+		IsActive:              aw != nil && as == nil,
+		IsFuture:              aw == nil,
+		SettleDuration:        settleDur(ac, as),
+		Comment:               s.Comment,
+		SleepEase:             s.SleepEase,
+		Overtired:             s.Overtired,
+		ToiletPee:             s.ToiletPee,
+		ToiletPoop:            s.ToiletPoop,
+		ToiletAccident:        s.ToiletAccident,
+		TrainingQuality:       s.TrainingQuality,
+		PhysicalActivity:      s.PhysicalActivity,
+		MentalActivity:        s.MentalActivity,
+		CalmWinddown:          s.CalmWinddown,
+		EnvironmentalActivity: s.EnvironmentalActivity,
+		Excluded:              s.Excluded,
+	}
+	if aw != nil && as != nil {
+		v.ActualDuration = formatDuration(as.Sub(*aw))
+	}
+	return v
 }

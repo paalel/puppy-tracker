@@ -55,6 +55,49 @@ func TestBuildScheduleClassification(t *testing.T) {
 	}
 }
 
+func TestBuildPastScheduleNapAndDuration(t *testing.T) {
+	woke1 := time.Date(2026, 1, 15, 7, 0, 0, 0, time.UTC)
+	slept1 := time.Date(2026, 1, 15, 7, 40, 0, 0, time.UTC)
+	woke2 := time.Date(2026, 1, 15, 9, 10, 0, 0, time.UTC) // 90 min after slept1
+	db := []dbSession{
+		{ID: 10, WokeAt: &woke1, SleptAt: &slept1},
+		{ID: 11, WokeAt: &woke2},
+	}
+
+	views := buildPastSchedule(db, nil)
+	if len(views) != 2 {
+		t.Fatalf("got %d views, want 2", len(views))
+	}
+	// Past durations are greyed, not colour-coded.
+	if views[0].DurationClass != "text-stone-400" {
+		t.Errorf("past durationClass = %q, want text-stone-400", views[0].DurationClass)
+	}
+	if views[0].ActualDuration != "40m" {
+		t.Errorf("actual duration = %q, want 40m", views[0].ActualDuration)
+	}
+	// Nap between session 0's sleep and session 1's wake = 90m.
+	if views[1].SleepDuration != "1h 30m" {
+		t.Errorf("nap = %q, want 1h 30m", views[1].SleepDuration)
+	}
+}
+
+func TestBuildScheduleAppendsUnmatched(t *testing.T) {
+	rs := []routine.RoutineSession{{ID: 1, Label: "Morning"}}
+	woke := time.Now().Add(-30 * time.Minute)
+	db := []dbSession{
+		{ID: 10, RoutineSessionID: intPtr(1), WokeAt: &woke, SleptAt: &woke},
+		{ID: 99, WokeAt: &woke}, // no routine slot → appended, active
+	}
+
+	views := buildSchedule("2026-01-15", db, rs, testCfg)
+	if len(views) != 2 {
+		t.Fatalf("got %d views, want 2 (1 routine + 1 appended)", len(views))
+	}
+	if views[1].ID != 99 || !views[1].IsActive {
+		t.Errorf("appended view = ID %d IsActive=%v, want ID 99 active", views[1].ID, views[1].IsActive)
+	}
+}
+
 // TestBuildScheduleCascade verifies that a subsequent session's planned wake
 // follows the previous session's actual sleep time, not the planned time.
 func TestBuildScheduleCascade(t *testing.T) {
