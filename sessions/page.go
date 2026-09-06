@@ -360,6 +360,7 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 		// when a session ran long (e.g. vet visit).
 		plannedSleep := plannedWake.Add(awake)
 		if aw != nil {
+			plannedWake = aw.Local()
 			plannedSleep = aw.Local().Add(awake)
 		}
 
