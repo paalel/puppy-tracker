@@ -113,6 +113,22 @@ func parseTemplates() (*template.Template, error) {
 			}
 			return int(math.Floor(time.Since(*t).Hours() / (24 * 7)))
 		},
+		"ageMonthsWeeks": func(t *time.Time) string {
+			if t == nil {
+				return ""
+			}
+			now := time.Now()
+			months := 0
+			for t.AddDate(0, months+1, 0).Before(now) {
+				months++
+			}
+			remaining := int(now.Sub(t.AddDate(0, months, 0)).Hours() / 24)
+			weeks := remaining / 7
+			if weeks == 0 {
+				return fmt.Sprintf("%dm", months)
+			}
+			return fmt.Sprintf("%dm %dw", months, weeks)
+		},
 		"birthdateStr": func(t *time.Time) string {
 			if t == nil {
 				return ""

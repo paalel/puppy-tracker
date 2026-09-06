@@ -19,7 +19,7 @@
 
         <header class="mb-5">
             <h1 class="text-lg font-semibold tracking-tight text-stone-800">Puppy Routine Tracker 🦆</h1>
-            <p class="text-xs text-stone-400">{{.Config.PuppyName}}{{if .Config.Birthdate}} · {{ageWeeks .Config.Birthdate}}w{{end}}</p>
+            <p class="text-xs text-stone-400">{{.Config.PuppyName}}{{if .Config.Birthdate}} · {{ageMonthsWeeks .Config.Birthdate}}{{end}}</p>
         </header>
 
         {{if .IsLocal}}
