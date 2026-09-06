@@ -480,6 +480,74 @@ func getPeeWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 	return pts, nil
 }
 
+// getSettleWeekly returns average settle time (crate→sleep) per week, labelled by age week.
+func getSettleWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
+	rows, err := db.Query(`
+		SELECT date,
+		       CAST(strftime('%s', slept_at) - strftime('%s', crate_at) AS INTEGER) AS settle_secs
+		FROM sessions
+		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL
+		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0
+		ORDER BY date
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ageWeek := func(t time.Time) int {
+		if birthdate != nil {
+			return int(t.Sub(*birthdate).Hours() / (24 * 7))
+		}
+		return 0
+	}
+
+	type weekAgg struct{ totalSecs, n int }
+	weekMap := make(map[int]*weekAgg)
+	firstWeek, lastWeek := 9999, -1
+	for rows.Next() {
+		var date string
+		var secs int
+		if err := rows.Scan(&date, &secs); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			continue
+		}
+		w := ageWeek(t)
+		if weekMap[w] == nil {
+			weekMap[w] = &weekAgg{}
+		}
+		weekMap[w].totalSecs += secs
+		weekMap[w].n++
+		if w < firstWeek {
+			firstWeek = w
+		}
+		if w > lastWeek {
+			lastWeek = w
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(weekMap) == 0 {
+		return nil, nil
+	}
+
+	pts := make([]FloatPoint, 0, lastWeek-firstWeek+1)
+	for w := firstWeek; w <= lastWeek; w++ {
+		label := fmt.Sprintf("Wk %d", w)
+		if agg, ok := weekMap[w]; ok && agg.n > 0 {
+			avg := math.Round(float64(agg.totalSecs)/float64(agg.n)/6) / 10 // secs → mins, 1dp
+			pts = append(pts, FloatPoint{X: label, Y: avg})
+		} else {
+			pts = append(pts, FloatPoint{X: label, Y: 0})
+		}
+	}
+	return pts, nil
+}
+
 // getAccidentWeekly returns one ChartPoint per week since tracking began,
 // labelled by the puppy's age in weeks ("Wk 8", "Wk 9", …).
 // Weeks with no accidents are included as Y=0 so the trend is visible.

@@ -26,25 +26,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 type StatsData struct {
-	Days             []DayStat
-	Config           *config.Config
-	Tab              string
-	AwakeJSON        template.JS
-	NapJSON          template.JS
-	SettleEasyJSON   template.JS
-	SettleOkJSON     template.JS
-	SettleHardJSON   template.JS
-	SettleNoneJSON   template.JS
-	AccidentStats       *AccidentStats
-	SettleDayEasyJSON   template.JS
-	SettleDayOkJSON     template.JS
-	SettleDayHardJSON   template.JS
-	SettleDayNoneJSON   template.JS
-	BucketJSON          template.JS
-	KDEJSON             template.JS
-	TotalPoops          int
-	TotalWakes          int
-	TotalSleepJSON      template.JS
+	Days               []DayStat
+	Config             *config.Config
+	Tab                string
+	TotalSleepJSON     template.JS
+	SettleWeeklyJSON   template.JS
+	AccidentStats      *AccidentStats
+	BucketJSON         template.JS
+	KDEJSON            template.JS
+	TotalPoops         int
+	TotalWakes         int
 	AccidentWeeklyJSON template.JS
 	TotalAccidents     int
 	PeeWeeklyJSON      template.JS
@@ -73,27 +64,14 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	sd := &StatsData{Days: days, Config: cfg, Tab: tab}
 	switch tab {
 	case "sleep":
-		series, err := getSessionSeries(h.db)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		sd.SettleEasyJSON = mustJSON(series.SettleEasy)
-		sd.SettleOkJSON = mustJSON(series.SettleOk)
-		sd.SettleHardJSON = mustJSON(series.SettleHard)
-		sd.SettleNoneJSON = mustJSON(series.SettleNone)
-
 		sd.TotalSleepJSON = mustJSON(totalSleepPoints(days, store.RolloverDate()))
 
-		easy, ok, hard, none, err := getSettleByDay(h.db, store.RolloverDate())
+		settleWeekly, err := getSettleWeekly(h.db, cfg.Birthdate)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		sd.SettleDayEasyJSON = mustJSON(easy)
-		sd.SettleDayOkJSON = mustJSON(ok)
-		sd.SettleDayHardJSON = mustJSON(hard)
-		sd.SettleDayNoneJSON = mustJSON(none)
+		sd.SettleWeeklyJSON = mustJSON(settleWeekly)
 
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)
