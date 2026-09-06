@@ -225,6 +225,15 @@ const (
 	minDensitySamples = 3
 )
 
+// recencyHalfLifeDays matches the live predictor: a poop observation this many
+// days older than the most recent tracked day carries half the influence, so the
+// timing and probability reflect her current pattern as her feeding schedule
+// (and thus her poop schedule) shifts with age. All data is still used.
+const recencyHalfLifeDays = 28
+
+// wobs is a recency-weighted observation: a local fractional hour with a weight.
+type wobs struct{ h, w float64 }
+
 // getToiletAnalytics groups poops by their ordinal within each day (1st, 2nd, …)
 // and summarises each ordinal's timing as median + interquartile range. Ordinals
 // with fewer than minTimingSamples observations are dropped rather than shown noisily.
@@ -265,64 +274,105 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 		return nil, err
 	}
 
-	byOrdinal := map[int][]float64{}
-	for _, times := range perDay {
-		for i, hf := range times {
-			byOrdinal[i+1] = append(byOrdinal[i+1], hf)
-		}
-	}
-
-	totalDays, err := countTrackedDays(db)
+	// Recency weight per day: decays from the most recent tracked day. The same
+	// weight is the probability denominator's per-day contribution, so P(Nth poop)
+	// = weighted days with an Nth poop / weighted total tracked days.
+	dayWeight, weightedTotalDays, err := trackedDayWeights(db)
 	if err != nil {
 		return nil, err
 	}
 
+	byOrdinal := map[int][]wobs{}
+	for date, times := range perDay {
+		w := dayWeight[date]
+		for i, hf := range times {
+			byOrdinal[i+1] = append(byOrdinal[i+1], wobs{h: hf, w: w})
+		}
+	}
+
 	ta := &ToiletAnalytics{TotalPoops: total}
 	for ordinal := 1; ; ordinal++ {
-		times, ok := byOrdinal[ordinal]
-		if !ok || len(times) < minDensitySamples {
+		obs, ok := byOrdinal[ordinal]
+		if !ok || len(obs) < minDensitySamples { // gate on raw count so rare poops still show
 			break
 		}
 		// Median + IQR bars need a few more points to be stable than a density.
-		if len(times) >= minTimingSamples {
-			sorted := append([]float64(nil), times...)
-			sort.Float64s(sorted)
+		if len(obs) >= minTimingSamples {
+			sorted := append([]wobs(nil), obs...)
+			sort.Slice(sorted, func(i, j int) bool { return sorted[i].h < sorted[j].h })
 			ta.Timings = append(ta.Timings, PoopTiming{
 				Label:  ordinalLabel(ordinal),
 				Count:  len(sorted),
-				Median: percentile(sorted, 0.5),
-				P25:    percentile(sorted, 0.25),
-				P75:    percentile(sorted, 0.75),
+				Median: weightedPercentile(sorted, 0.5),
+				P25:    weightedPercentile(sorted, 0.25),
+				P75:    weightedPercentile(sorted, 0.75),
 			})
 		}
 		// Density curve scaled so its area equals P(this poop happens on a day).
+		var wnum float64
+		for _, o := range obs {
+			wnum += o.w
+		}
 		prob := 0.0
-		if totalDays > 0 {
-			prob = float64(len(times)) / float64(totalDays)
+		if weightedTotalDays > 0 {
+			prob = math.Min(1, wnum/weightedTotalDays)
 		}
 		ta.Densities = append(ta.Densities, PoopDensity{
 			Label:       ordinalLabel(ordinal),
 			Probability: math.Round(prob*100) / 100,
-			Curve:       scaledKDE(times, prob),
+			Curve:       scaledKDE(obs, prob),
 		})
 	}
 	return ta, nil
 }
 
-// countTrackedDays counts distinct days with at least one session that counts
-// toward stats (not excluded, not alone) — the denominator for poop probability.
-func countTrackedDays(db *sql.DB) (int, error) {
-	var n int
-	err := db.QueryRow(
-		`SELECT COUNT(DISTINCT date) FROM sessions WHERE COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0`,
-	).Scan(&n)
-	return n, err
+// trackedDayWeights returns a recency weight per tracked day (distinct date with a
+// non-excluded, non-alone session) and their sum. Weights decay from the most
+// recent tracked day so recent behaviour dominates the poop stats.
+func trackedDayWeights(db *sql.DB) (map[string]float64, float64, error) {
+	rows, err := db.Query(
+		`SELECT DISTINCT date FROM sessions WHERE COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0`,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var dates []string
+	var ref time.Time
+	for rows.Next() {
+		var ds string
+		if err := rows.Scan(&ds); err != nil {
+			return nil, 0, err
+		}
+		d, err := time.Parse("2006-01-02", ds)
+		if err != nil {
+			continue
+		}
+		dates = append(dates, ds)
+		if d.After(ref) {
+			ref = d
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	weights := make(map[string]float64, len(dates))
+	var totalW float64
+	for _, ds := range dates {
+		d, _ := time.Parse("2006-01-02", ds)
+		w := math.Exp2(-ref.Sub(d).Hours() / 24 / recencyHalfLifeDays)
+		weights[ds] = w
+		totalW += w
+	}
+	return weights, totalW, nil
 }
 
-// scaledKDE returns a 24-point circular Gaussian KDE of the given local hours,
+// scaledKDE returns a 24-point circular Gaussian KDE of the weighted observations,
 // normalised so the sum of the values (each a 1-hour bin) equals area.
-func scaledKDE(times []float64, area float64) []float64 {
-	kde := computeCircularKDE(times)
+func scaledKDE(obs []wobs, area float64) []float64 {
+	kde := computeCircularKDE(obs)
 	sum := 0.0
 	for _, v := range kde {
 		sum += v
@@ -337,21 +387,21 @@ func scaledKDE(times []float64, area float64) []float64 {
 	return out
 }
 
-// computeCircularKDE evaluates a Gaussian KDE at the midpoint of each hour,
-// wrapping around midnight so 23:30 and 00:30 are treated as close.
-func computeCircularKDE(times []float64) []float64 {
+// computeCircularKDE evaluates a recency-weighted Gaussian KDE at the midpoint of
+// each hour, wrapping around midnight so 23:30 and 00:30 are treated as close.
+func computeCircularKDE(obs []wobs) []float64 {
 	const bandwidth = 1.2
 	result := make([]float64, 24)
 	for h := 0; h < 24; h++ {
 		x := float64(h) + 0.5
-		for _, t := range times {
-			d := x - t
+		for _, o := range obs {
+			d := x - o.h
 			if d > 12 {
 				d -= 24
 			} else if d < -12 {
 				d += 24
 			}
-			result[h] += math.Exp(-0.5 * d * d / (bandwidth * bandwidth))
+			result[h] += o.w * math.Exp(-0.5*d*d/(bandwidth*bandwidth))
 		}
 	}
 	return result
@@ -370,20 +420,40 @@ func ordinalLabel(n int) string {
 	}
 }
 
-// percentile returns the p-quantile (0–1) of a pre-sorted slice via linear
-// interpolation between adjacent ranks.
-func percentile(sorted []float64, p float64) float64 {
+// weightedPercentile returns the p-quantile (0–1) of observations pre-sorted by
+// hour, using cumulative weight: the quantile is where the running weight crosses
+// p of the total, linearly interpolated between adjacent points.
+func weightedPercentile(sorted []wobs, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
 	}
 	if len(sorted) == 1 {
-		return sorted[0]
+		return sorted[0].h
 	}
-	rank := p * float64(len(sorted)-1)
-	lo := int(math.Floor(rank))
-	hi := int(math.Ceil(rank))
-	frac := rank - float64(lo)
-	return sorted[lo] + frac*(sorted[hi]-sorted[lo])
+	total := 0.0
+	for _, o := range sorted {
+		total += o.w
+	}
+	if total == 0 {
+		return sorted[len(sorted)/2].h
+	}
+	target := p * total
+	cum := 0.0
+	for i, o := range sorted {
+		prev := cum
+		cum += o.w
+		if cum >= target {
+			if i == 0 {
+				return o.h
+			}
+			frac := 0.0
+			if o.w > 0 {
+				frac = (target - prev) / o.w
+			}
+			return sorted[i-1].h + frac*(o.h-sorted[i-1].h)
+		}
+	}
+	return sorted[len(sorted)-1].h
 }
 
 // getPeeWeekly returns average pees per tracked (non-excluded) day, one point per week
