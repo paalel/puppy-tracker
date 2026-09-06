@@ -363,21 +363,24 @@ type trainRow struct {
 	poop           bool
 }
 
-// loadTrainingData returns one row per non-excluded session that has a prior poop,
-// with the UTC hour of woke_at and elapsed hours since the most recent prior poop.
+// loadTrainingData generates one observation per clock-hour slot within each
+// non-excluded active window (woke_at → crate_at/slept_at). Poop is assigned to
+// the final slot, which is the best approximation of when it occurred. This lets
+// the model learn P(poop | current_clock_hour, current_hours_since_poop) rather
+// than per-session, so Predict() can be called with the live clock hour.
 func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 	rows, err := db.Query(`
 		SELECT
-			CAST(strftime('%H', s.woke_at, 'localtime') AS INTEGER) AS local_hour,
-			(CAST(strftime('%s', s.woke_at) AS REAL) -
-			 CAST(strftime('%s', (
-			     SELECT MAX(p.woke_at) FROM sessions p
-			     WHERE p.toilet_poop = 1 AND p.woke_at < s.woke_at
-			       AND COALESCE(p.excluded, 0) = 0
-			 )) AS REAL)) / 3600.0 AS hours_since_poop,
-			s.toilet_poop
+			s.woke_at,
+			COALESCE(s.crate_at, s.slept_at) AS end_at,
+			s.toilet_poop,
+			(SELECT MAX(p.woke_at) FROM sessions p
+			 WHERE p.toilet_poop = 1 AND p.woke_at < s.woke_at
+			   AND COALESCE(p.excluded, 0) = 0) AS last_poop_at
 		FROM sessions s
-		WHERE s.woke_at IS NOT NULL AND COALESCE(s.excluded, 0) = 0
+		WHERE s.woke_at IS NOT NULL
+		  AND COALESCE(s.crate_at, s.slept_at) IS NOT NULL
+		  AND COALESCE(s.excluded, 0) = 0
 		  AND EXISTS (
 		      SELECT 1 FROM sessions p
 		      WHERE p.toilet_poop = 1 AND p.woke_at < s.woke_at
@@ -389,18 +392,63 @@ func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var data []trainRow
+
+	type sessRow struct {
+		wokeAt     time.Time
+		endAt      time.Time
+		poop       bool
+		lastPoopAt time.Time
+	}
+	var sessions []sessRow
 	for rows.Next() {
-		var localHour, poop int
-		var hoursSincePoop float64
-		if err := rows.Scan(&localHour, &hoursSincePoop, &poop); err != nil {
+		var wokeStr, endStr, lastPoopStr string
+		var poopInt int
+		if err := rows.Scan(&wokeStr, &endStr, &poopInt, &lastPoopStr); err != nil {
 			return nil, err
 		}
-		if hoursSincePoop > 0 {
-			data = append(data, trainRow{localHour, hoursSincePoop, poop == 1})
+		wokeAt, err := parseTimestamp(wokeStr)
+		if err != nil {
+			continue
+		}
+		endAt, err := parseTimestamp(endStr)
+		if err != nil {
+			continue
+		}
+		lastPoop, err := parseTimestamp(lastPoopStr)
+		if err != nil {
+			continue
+		}
+		if !endAt.After(wokeAt) {
+			continue
+		}
+		sessions = append(sessions, sessRow{wokeAt, endAt, poopInt == 1, lastPoop})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var data []trainRow
+	for _, s := range sessions {
+		slotStart := s.wokeAt
+		for slotStart.Before(s.endAt) {
+			nextBoundary := slotStart.UTC().Truncate(time.Hour).Add(time.Hour)
+			slotEnd := s.endAt
+			if nextBoundary.Before(s.endAt) {
+				slotEnd = nextBoundary
+			}
+			hsp := slotStart.Sub(s.lastPoopAt).Hours()
+			isLast := !slotEnd.Before(s.endAt)
+			if hsp > 0 {
+				data = append(data, trainRow{
+					localHour:      slotStart.Local().Hour(),
+					hoursSincePoop: hsp,
+					poop:           isLast && s.poop,
+				})
+			}
+			slotStart = slotEnd
 		}
 	}
-	return data, rows.Err()
+	return data, nil
 }
 
 // getHoursSinceLastPoop returns hours elapsed since the last poop session's woke_at.

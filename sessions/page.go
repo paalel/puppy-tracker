@@ -114,21 +114,18 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		hoursSincePoop, _ := getHoursSinceLastPoop(db)
 		if hoursSincePoop >= 0 {
 			cycleHours := float64(cfg.AwakeMinutes+cfg.NapMinutes) / 60.0
+			currentHour := now.Local().Hour()
 			futureOffset := 0
 			for i := range views {
-				var localHour int
-				if views[i].ActualWake != nil {
-					localHour = views[i].ActualWake.Local().Hour()
-				} else {
-					localHour = views[i].PlannedWake.Local().Hour()
-				}
 				var mid, lo, hi float64
 				switch {
 				case views[i].IsActive:
-					mid, lo, hi = pred.Predict(localHour, hoursSincePoop)
+					// Use live clock hour so probability updates each hour as time passes.
+					mid, lo, hi = pred.Predict(currentHour, hoursSincePoop)
 				case views[i].IsFuture:
 					futureOffset++
-					mid, lo, hi = pred.Predict(localHour, hoursSincePoop+float64(futureOffset)*cycleHours)
+					plannedHour := views[i].PlannedWake.Local().Hour()
+					mid, lo, hi = pred.Predict(plannedHour, hoursSincePoop+float64(futureOffset)*cycleHours)
 				}
 				views[i].PoopLikelihood = mid
 				views[i].PoopLo = lo
