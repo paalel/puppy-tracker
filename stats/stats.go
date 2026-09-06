@@ -63,4 +63,5 @@ type SettleFactor struct {
 	WithoutAvg float64
 	N          int     // sessions that had the activity
 	DeltaMins  float64 // WithAvg − WithoutAvg
+	BarPct     int     // bar width 0–100, scaled to the strongest effect
 }

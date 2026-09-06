@@ -524,6 +524,24 @@ func getSettleByActivity(db *sql.DB) ([]SettleFactor, error) {
 		})
 	}
 	sort.Slice(factors, func(i, j int) bool { return factors[i].DeltaMins < factors[j].DeltaMins })
+
+	// Scale bar widths to the strongest effect, keeping a sliver visible for small ones.
+	maxAbs := 0.0
+	for _, f := range factors {
+		if a := math.Abs(f.DeltaMins); a > maxAbs {
+			maxAbs = a
+		}
+	}
+	for i := range factors {
+		pct := 8
+		if maxAbs > 0 {
+			pct = int(math.Round(math.Abs(factors[i].DeltaMins) / maxAbs * 100))
+			if pct < 8 {
+				pct = 8
+			}
+		}
+		factors[i].BarPct = pct
+	}
 	return factors, nil
 }
 

@@ -166,16 +166,17 @@ func parseTemplates() (*template.Template, error) {
 		"hourSpanPct": func(lo, hi float64) string {
 			return fmt.Sprintf("%.1f", hourWindowPct(hi)-hourWindowPct(lo))
 		},
-		// settleDelta describes a settle-time difference in minutes: negative
+		// settleDelta describes a settle-time difference in plain words: negative
 		// means the activity is associated with settling faster.
 		"settleDelta": func(d float64) string {
+			m := int(math.Round(math.Abs(d)))
 			switch {
 			case d <= -0.5:
-				return fmt.Sprintf("%.1fm faster", -d)
+				return fmt.Sprintf("settles ~%d min faster", m)
 			case d >= 0.5:
-				return fmt.Sprintf("+%.1fm slower", d)
+				return fmt.Sprintf("settles ~%d min slower", m)
 			default:
-				return "about the same"
+				return "no real difference"
 			}
 		},
 		"settleDeltaClass": func(d float64) string {
@@ -186,6 +187,16 @@ func parseTemplates() (*template.Template, error) {
 				return "text-rose-500"
 			default:
 				return "text-stone-400"
+			}
+		},
+		"settleBarClass": func(d float64) string {
+			switch {
+			case d <= -0.5:
+				return "bg-emerald-400"
+			case d >= 0.5:
+				return "bg-rose-400"
+			default:
+				return "bg-stone-300"
 			}
 		},
 		"poopAlert": func(p float64) string {
