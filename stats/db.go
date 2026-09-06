@@ -26,7 +26,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			SUM(CASE WHEN overtired = 1          THEN 1 ELSE 0 END) AS overtired_count,
 			SUM(CASE WHEN toilet_accident = 1    THEN 1 ELSE 0 END) AS accident_count
 		FROM sessions
-		WHERE slept_at IS NOT NULL AND excluded = 0
+		WHERE slept_at IS NOT NULL AND excluded = 0 AND alone = 0
 		GROUP BY date
 		ORDER BY date DESC
 		LIMIT 30
@@ -71,7 +71,8 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			INNER JOIN sessions s2
 			       ON  s2.date = s1.date
 			       AND s2.id   = (SELECT MIN(id) FROM sessions WHERE date = s1.date AND id > s1.id AND woke_at IS NOT NULL)
-			WHERE s1.slept_at IS NOT NULL AND s1.excluded = 0 AND s2.excluded = 0 AND nap_secs > 0
+			WHERE s1.slept_at IS NOT NULL AND s1.excluded = 0 AND s2.excluded = 0
+			      AND s1.alone = 0 AND s2.alone = 0 AND nap_secs > 0
 		) GROUP BY date
 	`)
 	if err != nil {
@@ -86,7 +87,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			SELECT date,
 			       CAST(strftime('%s', slept_at) AS INTEGER) - CAST(strftime('%s', crate_at) AS INTEGER) AS settle_secs
 			FROM sessions
-			WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0 AND settle_secs > 0
+			WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL AND excluded = 0 AND alone = 0 AND settle_secs > 0
 		) GROUP BY date
 	`)
 	if err != nil {
@@ -116,7 +117,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			  AND s2.id = (SELECT MIN(id) FROM sessions s4 WHERE s4.date = s2.date)
 			  AND s1.slept_at IS NOT NULL AND s2.woke_at IS NOT NULL
 		) WHERE sleep_secs > 0
-		  AND date NOT IN (SELECT DISTINCT date FROM sessions WHERE excluded = 1)
+		  AND date NOT IN (SELECT DISTINCT date FROM sessions WHERE excluded = 1 OR alone = 1)
 		GROUP BY date
 	`)
 	if err != nil {
@@ -151,7 +152,7 @@ func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
 	// Collect all accident timestamps in order.
 	rows, err := db.Query(`
 		SELECT woke_at FROM sessions
-		WHERE toilet_accident = 1 AND woke_at IS NOT NULL
+		WHERE toilet_accident = 1 AND woke_at IS NOT NULL AND COALESCE(alone, 0) = 0
 		ORDER BY woke_at ASC
 	`)
 	if err != nil {
@@ -175,7 +176,7 @@ func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
 
 	// Find start of tracking (first session).
 	var firstStr sql.NullString
-	err = db.QueryRow(`SELECT MIN(woke_at) FROM sessions WHERE woke_at IS NOT NULL AND COALESCE(excluded,0)=0`).Scan(&firstStr)
+	err = db.QueryRow(`SELECT MIN(woke_at) FROM sessions WHERE woke_at IS NOT NULL AND COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0`).Scan(&firstStr)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +231,7 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 			CAST(strftime('%H', woke_at, 'localtime') AS REAL) +
 			CAST(strftime('%M', woke_at, 'localtime') AS REAL) / 60.0 AS hour_frac
 		FROM sessions
-		WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0
+		WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
 		ORDER BY ordinal
 	`)
 	if err != nil {
@@ -305,7 +306,7 @@ func percentile(sorted []float64, p float64) float64 {
 func getPeeWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 	rows, err := db.Query(`
 		SELECT date, SUM(toilet_pee) FROM sessions
-		WHERE COALESCE(excluded, 0) = 0
+		WHERE COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
 		GROUP BY date ORDER BY date
 	`)
 	if err != nil {
@@ -388,7 +389,7 @@ func getSettleByActivity(db *sql.DB) ([]SettleFactor, error) {
 		       physical_activity, mental_activity, environmental_activity, calm_winddown
 		FROM sessions
 		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL
-		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0
+		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
 	`)
 	if err != nil {
 		return nil, err
@@ -448,7 +449,7 @@ func getSettleWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 		       CAST(strftime('%s', slept_at) - strftime('%s', crate_at) AS INTEGER) AS settle_secs
 		FROM sessions
 		WHERE crate_at IS NOT NULL AND slept_at IS NOT NULL
-		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0
+		  AND slept_at > crate_at AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
 		ORDER BY date
 	`)
 	if err != nil {
@@ -514,7 +515,7 @@ func getSettleWeekly(db *sql.DB, birthdate *time.Time) ([]FloatPoint, error) {
 // Weeks with no accidents are included as Y=0 so the trend is visible.
 func getAccidentWeekly(db *sql.DB, birthdate *time.Time) ([]ChartPoint, error) {
 	var firstStr sql.NullString
-	if err := db.QueryRow(`SELECT MIN(woke_at) FROM sessions WHERE excluded=0`).Scan(&firstStr); err != nil || !firstStr.Valid {
+	if err := db.QueryRow(`SELECT MIN(woke_at) FROM sessions WHERE excluded=0 AND alone=0`).Scan(&firstStr); err != nil || !firstStr.Valid {
 		return nil, err
 	}
 	firstTime, err := parseTimestamp(firstStr.String)
@@ -530,7 +531,7 @@ func getAccidentWeekly(db *sql.DB, birthdate *time.Time) ([]ChartPoint, error) {
 		return int(t.Sub(firstTime).Hours() / (24 * 7))
 	}
 
-	rows, err := db.Query(`SELECT woke_at FROM sessions WHERE toilet_accident = 1`)
+	rows, err := db.Query(`SELECT woke_at FROM sessions WHERE toilet_accident = 1 AND COALESCE(alone, 0) = 0`)
 	if err != nil {
 		return nil, err
 	}

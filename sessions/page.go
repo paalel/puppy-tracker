@@ -33,6 +33,8 @@ type PageData struct {
 	PoopLikelihood float64
 	PoopLo         float64
 	PoopHi         float64
+	AloneMode      bool
+	AloneSince     *time.Time
 }
 
 func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, error) {
@@ -103,6 +105,17 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		return nil, fmt.Errorf("poop status: %w", err)
 	}
 
+	var aloneMode bool
+	var aloneSince *time.Time
+	if isToday {
+		if aloneMode, err = AloneModeOn(db); err != nil {
+			return nil, fmt.Errorf("alone mode: %w", err)
+		}
+		if aloneSince, err = aloneModeSince(db); err != nil {
+			return nil, fmt.Errorf("alone since: %w", err)
+		}
+	}
+
 	var views []SessionView
 	if isToday {
 		views = buildSchedule(date, dbSessions, routineSessions, cfg)
@@ -163,6 +176,8 @@ func buildPageData(db *sql.DB, date string, pred *PoopPredictor) (*PageData, err
 		PoopLikelihood: poopLikelihood,
 		PoopLo:         poopLo,
 		PoopHi:         poopHi,
+		AloneMode:      aloneMode,
+		AloneSince:     aloneSince,
 	}, nil
 }
 
@@ -374,6 +389,7 @@ func sessionViewFromDB(s dbSession) SessionView {
 		CalmWinddown:          s.CalmWinddown,
 		EnvironmentalActivity: s.EnvironmentalActivity,
 		Excluded:              s.Excluded,
+		Alone:                 s.Alone,
 	}
 	if aw != nil && as != nil {
 		v.ActualDuration = formatDuration(as.Sub(*aw))

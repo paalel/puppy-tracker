@@ -33,6 +33,7 @@ type dbSession struct {
 	CalmWinddown          bool
 	EnvironmentalActivity bool
 	Excluded              bool
+	Alone                 bool
 }
 
 type SessionView struct {
@@ -65,6 +66,7 @@ type SessionView struct {
 	SleepDuration         string
 	SettleDuration        string
 	Excluded              bool
+	Alone                 bool
 	PoopLikelihood        float64
 	PoopLo                float64
 	PoopHi                float64

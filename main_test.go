@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"puppy/alone"
 	"puppy/config"
 	"puppy/routine"
 	"puppy/sessions"
@@ -37,7 +36,6 @@ func newTestApp(t *testing.T) http.Handler {
 	routine.New(db, tmpl).RegisterRoutes(mux)
 	stats.New(db, tmpl).RegisterRoutes(mux)
 	config.New(db, tmpl).RegisterRoutes(mux)
-	alone.New(db, tmpl).RegisterRoutes(mux)
 	return mux
 }
 
@@ -131,28 +129,25 @@ func TestPhaseInvalidRejected(t *testing.T) {
 	}
 }
 
-// Alone mode — start, mark, end.
+// Home-alone mode — toggle flags sessions without disrupting the normal flow.
 
-func TestAloneFlow(t *testing.T) {
+func TestAloneModeTogglesAndFlags(t *testing.T) {
 	app := newTestApp(t)
 
-	// Idle card renders.
-	if w := get(t, app, "/api/alone"); w.Code != http.StatusOK {
-		t.Fatalf("GET /api/alone (idle) = %d, want 200", w.Code)
+	// Turn on home-alone, then start a normal awake session.
+	if w := post(t, app, "/api/alone", url.Values{}); w.Code != http.StatusOK {
+		t.Fatalf("toggle alone on = %d, want 200", w.Code)
 	}
-	// Start → active card mentions the marker controls.
-	w := post(t, app, "/api/alone/start", url.Values{})
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "End alone time") {
-		t.Fatalf("start alone = %d, body missing end button", w.Code)
+	if w := post(t, app, "/api/phase", url.Values{"phase": {string(sessions.PhaseActive)}}); w.Code != http.StatusOK {
+		t.Fatalf("wake while alone = %d, want 200", w.Code)
 	}
-	// Log a marker.
-	if w := post(t, app, "/api/alone/marker", url.Values{"kind": {"asleep"}}); w.Code != http.StatusOK {
-		t.Errorf("marker asleep = %d, want 200", w.Code)
+	// The state fragment should reflect that we're in home-alone mode.
+	if w := get(t, app, "/api/state"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "alone") {
+		t.Errorf("state after toggle = %d, body missing alone indicator", w.Code)
 	}
-	// End → back to idle with the session in recent history.
-	w = post(t, app, "/api/alone/end", url.Values{})
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "asleep") {
-		t.Errorf("end alone = %d, body missing recent summary", w.Code)
+	// Toggle off again.
+	if w := post(t, app, "/api/alone", url.Values{}); w.Code != http.StatusOK {
+		t.Errorf("toggle alone off = %d, want 200", w.Code)
 	}
 }
 

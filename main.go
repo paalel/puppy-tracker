@@ -13,7 +13,6 @@ import (
 	_ "modernc.org/sqlite"
 	_ "time/tzdata"
 
-	"puppy/alone"
 	"puppy/camera"
 	"puppy/config"
 	"puppy/routine"
@@ -123,7 +122,6 @@ func main() {
 	stats.New(db, tmpl).RegisterRoutes(mux)
 	config.New(db, tmpl).RegisterRoutes(mux)
 	camera.New(db, tmpl).RegisterRoutes(mux)
-	alone.New(db, tmpl).RegisterRoutes(mux)
 
 	log.Println("Puppy Routine Tracker listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))

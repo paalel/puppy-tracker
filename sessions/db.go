@@ -52,10 +52,63 @@ func logWake(db *sql.DB, date string) error {
 	if err := db.QueryRow(`SELECT id FROM routine_sessions ORDER BY position LIMIT 1 OFFSET ?`, count).Scan(&routineSessionID); err != nil && err != sql.ErrNoRows {
 		return err
 	}
-	_, err := db.Exec(
-		`INSERT INTO sessions (date, woke_at, routine_session_id) VALUES (?, ?, ?)`,
-		date, nowUTC(), routineSessionID,
+	alone, err := AloneModeOn(db)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		`INSERT INTO sessions (date, woke_at, routine_session_id, alone) VALUES (?, ?, ?, ?)`,
+		date, nowUTC(), routineSessionID, alone,
 	)
+	return err
+}
+
+// AloneModeOn reports whether home-alone mode is currently active — represented
+// by an open interval in pen_sessions.
+func AloneModeOn(db *sql.DB) (bool, error) {
+	var one int
+	err := db.QueryRow(`SELECT 1 FROM pen_sessions WHERE ended_at IS NULL LIMIT 1`).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// aloneModeSince returns when the current home-alone interval began, or nil.
+func aloneModeSince(db *sql.DB) (*time.Time, error) {
+	var raw sql.NullString
+	err := db.QueryRow(`SELECT started_at FROM pen_sessions WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1`).Scan(&raw)
+	if err == sql.ErrNoRows || !raw.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	t, err := parseTimestamp(raw.String)
+	if err != nil {
+		return nil, err
+	}
+	lt := t.Local()
+	return &lt, nil
+}
+
+// toggleAloneMode starts home-alone mode if off, or ends it if on. Starting also
+// flags the current in-progress session (if any) as alone, since she was already
+// awake/settling when you left.
+func toggleAloneMode(db *sql.DB) error {
+	on, err := AloneModeOn(db)
+	if err != nil {
+		return err
+	}
+	if on {
+		_, err = db.Exec(`UPDATE pen_sessions SET ended_at = ? WHERE ended_at IS NULL`, nowUTC())
+		return err
+	}
+	if _, err = db.Exec(`INSERT INTO pen_sessions (started_at) VALUES (?)`, nowUTC()); err != nil {
+		return err
+	}
+	// Flag the open session (latest one not yet asleep) as alone.
+	_, err = db.Exec(`UPDATE sessions SET alone = 1 WHERE id = (SELECT id FROM sessions WHERE slept_at IS NULL ORDER BY id DESC LIMIT 1)`)
 	return err
 }
 
@@ -178,7 +231,8 @@ func getSessionsForDate(db *sql.DB, date string) ([]dbSession, error) {
 		       COALESCE(mental_activity, 0),
 		       COALESCE(calm_winddown, 0),
 		       COALESCE(environmental_activity, 0),
-		       COALESCE(excluded, 0)
+		       COALESCE(excluded, 0),
+		       COALESCE(alone, 0)
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
 		return nil, err
@@ -192,13 +246,13 @@ func getSessionsForDate(db *sql.DB, date string) ([]dbSession, error) {
 		var crateAt, sleptAt sql.NullString
 		var routineSessionID sql.NullInt64
 		var overtiredInt, peeInt, poopInt, accidentInt int
-		var physicalInt, mentalInt, calmInt, environmentalInt, excludedInt int
+		var physicalInt, mentalInt, calmInt, environmentalInt, excludedInt, aloneInt int
 		if err := rows.Scan(
 			&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt,
 			&s.Comment, &s.SleepEase, &overtiredInt,
 			&peeInt, &poopInt, &accidentInt,
 			&s.TrainingQuality,
-			&physicalInt, &mentalInt, &calmInt, &environmentalInt, &excludedInt,
+			&physicalInt, &mentalInt, &calmInt, &environmentalInt, &excludedInt, &aloneInt,
 		); err != nil {
 			return nil, err
 		}
@@ -215,6 +269,7 @@ func getSessionsForDate(db *sql.DB, date string) ([]dbSession, error) {
 		s.CalmWinddown = calmInt == 1
 		s.EnvironmentalActivity = environmentalInt == 1
 		s.Excluded = excludedInt == 1
+		s.Alone = aloneInt == 1
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}
@@ -356,7 +411,6 @@ func getPoopStatus(db *sql.DB) (*PoopStatus, error) {
 	return &PoopStatus{LastPoop: &last}, nil
 }
 
-
 type trainRow struct {
 	localHour      int
 	hoursSincePoop float64
@@ -376,15 +430,15 @@ func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 			s.toilet_poop,
 			(SELECT MAX(p.woke_at) FROM sessions p
 			 WHERE p.toilet_poop = 1 AND p.woke_at < s.woke_at
-			   AND COALESCE(p.excluded, 0) = 0) AS last_poop_at
+			   AND COALESCE(p.excluded, 0) = 0 AND COALESCE(p.alone, 0) = 0) AS last_poop_at
 		FROM sessions s
 		WHERE s.woke_at IS NOT NULL
 		  AND COALESCE(s.crate_at, s.slept_at) IS NOT NULL
-		  AND COALESCE(s.excluded, 0) = 0
+		  AND COALESCE(s.excluded, 0) = 0 AND COALESCE(s.alone, 0) = 0
 		  AND EXISTS (
 		      SELECT 1 FROM sessions p
 		      WHERE p.toilet_poop = 1 AND p.woke_at < s.woke_at
-		        AND COALESCE(p.excluded, 0) = 0
+		        AND COALESCE(p.excluded, 0) = 0 AND COALESCE(p.alone, 0) = 0
 		  )
 		ORDER BY s.woke_at
 	`)
@@ -469,4 +523,3 @@ func getHoursSinceLastPoop(db *sql.DB) (float64, error) {
 	}
 	return hours.Float64, nil
 }
-
