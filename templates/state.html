@@ -36,7 +36,6 @@
     </form>
     {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "session-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/crate-adjust" "Label" "In crate at" "Time" .LastCrateAt}}
-    {{template "alone-toggle" .}}
     {{template "undo-phase" .}}
 </div>
 
@@ -68,7 +67,6 @@
     </form>
     {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "session-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/sleep-adjust" "Label" "Fell asleep at" "Time" .LastSleptAt}}
-    {{template "alone-toggle" .}}
     {{template "undo-phase" .}}
 </div>
 
@@ -104,7 +102,6 @@
     </form>
     {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "session-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/wake-adjust" "Label" "Woke up at" "Time" .LastWokeAt}}
-    {{template "alone-toggle" .}}
     {{template "undo-phase" .}}
 </div>
 {{end}}

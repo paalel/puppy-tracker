@@ -129,28 +129,6 @@ func TestPhaseInvalidRejected(t *testing.T) {
 	}
 }
 
-// Home-alone mode — toggle flags sessions without disrupting the normal flow.
-
-func TestAloneModeTogglesAndFlags(t *testing.T) {
-	app := newTestApp(t)
-
-	// Turn on home-alone, then start a normal awake session.
-	if w := post(t, app, "/api/alone", url.Values{}); w.Code != http.StatusOK {
-		t.Fatalf("toggle alone on = %d, want 200", w.Code)
-	}
-	if w := post(t, app, "/api/phase", url.Values{"phase": {string(sessions.PhaseActive)}}); w.Code != http.StatusOK {
-		t.Fatalf("wake while alone = %d, want 200", w.Code)
-	}
-	// The state fragment should reflect that we're in home-alone mode.
-	if w := get(t, app, "/api/state"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "alone") {
-		t.Errorf("state after toggle = %d, body missing alone indicator", w.Code)
-	}
-	// Toggle off again.
-	if w := post(t, app, "/api/alone", url.Values{}); w.Code != http.StatusOK {
-		t.Errorf("toggle alone off = %d, want 200", w.Code)
-	}
-}
-
 // Config — save and re-render.
 
 func TestSaveConfig(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"net/http"
 
 	"puppy/config"
-	"puppy/store"
 )
 
 type Handler struct {
@@ -29,10 +28,6 @@ type StatsData struct {
 	Days               []DayStat
 	Config             *config.Config
 	Tab                string
-	TotalSleepJSON     template.JS
-	SettleWeeklyJSON   template.JS
-	SettleFactors      []SettleFactor
-	SettleCounts       []SettleCount
 	AccidentStats      *AccidentStats
 	PoopTimings        []PoopTiming
 	PoopDensitiesJSON  template.JS
@@ -54,7 +49,7 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tab := r.URL.Query().Get("tab")
-	if tab != "sleep" && tab != "toilet" {
+	if tab != "toilet" {
 		tab = "log"
 	}
 
@@ -64,30 +59,6 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	}
 	sd := &StatsData{Days: days, Config: cfg, Tab: tab}
 	switch tab {
-	case "sleep":
-		sd.TotalSleepJSON = mustJSON(totalSleepPoints(days, store.RolloverDate()))
-
-		settleWeekly, err := getSettleWeekly(h.db, cfg.Birthdate)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		sd.SettleWeeklyJSON = mustJSON(settleWeekly)
-
-		factors, err := getSettleByActivity(h.db)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		sd.SettleFactors = factors
-
-		counts, err := getSettleByActivityCount(h.db)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		sd.SettleCounts = counts
-
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)
 		if err != nil {
