@@ -46,6 +46,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/session/{id}/calm-winddown", h.handleToggleSessionBool("calm_winddown"))
 	mux.HandleFunc("POST /api/session/{id}/environmental-activity", h.handleToggleSessionBool("environmental_activity"))
 	mux.HandleFunc("POST /api/session/{id}/excluded", h.handleToggleSessionBool("excluded"))
+	mux.HandleFunc("POST /api/session/{id}/alone-slept", h.handleSetSessionEnum("alone_slept", SleptWell, SleptSome, SleptNone))
+	mux.HandleFunc("POST /api/session/{id}/alone-behaviour", h.handleSetSessionEnum("alone_behaviour", BehaviourCalm, BehaviourUnsettled, BehaviourStressed))
+	mux.HandleFunc("POST /api/session/{id}/alone-location", h.handleSetSessionEnum("alone_location", LocationCage, LocationPen, LocationRoaming))
+	mux.HandleFunc("POST /api/session/{id}/alone-destroyed", h.handleToggleSessionBool("alone_destroyed"))
 }
 
 func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {

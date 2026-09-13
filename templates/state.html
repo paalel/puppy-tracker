@@ -87,6 +87,7 @@
             She's back
         </button>
     </form>
+    {{with currentSession .Sessions}}{{if .ID}}<div class="mt-4 pt-4 border-t border-stone-100">{{template "alone-fields" .}}</div>{{end}}{{end}}
     {{template "time-adjust" dict "Endpoint" "/api/wake-adjust" "Label" "Left at" "Time" .LastWokeAt}}
     {{template "undo-phase" .}}
 </div>
@@ -145,7 +146,7 @@
         </div>
         <div class="min-w-0 flex-1">
             <div class="flex items-baseline justify-between gap-2">
-                <span class="text-sm font-medium {{if .IsPast}}text-stone-500{{else}}text-stone-700{{end}} {{if .Excluded}}line-through{{end}}">{{.Label}}{{if .Alone}} <span title="Home alone">🏠</span>{{end}}</span>
+                <span class="text-sm font-medium {{if .IsPast}}text-stone-500{{else}}text-stone-700{{end}} {{if .Excluded}}line-through{{end}}">{{if .Alone}}🏠 Home alone{{else}}{{.Label}}{{end}}</span>
                 {{if .ActualDuration}}
                   <span class="ml-auto {{.DurationClass}} text-xs font-medium">{{.ActualDuration}}</span>
                 {{else}}
@@ -191,10 +192,10 @@
                 {{end}}
             </div>
             {{if .ID}}
-            {{template "session-fields" .}}
+            {{if .Alone}}{{template "alone-fields" .}}{{else}}{{template "session-fields" .}}{{end}}
             {{end}}
             {{else if .IsActive}}
-            <p class="text-xs text-emerald-600 mt-0.5">Active now · since {{fmtTime .ActualWake}}</p>
+            <p class="text-xs text-emerald-600 mt-0.5">{{if .Alone}}Home alone · since{{else}}Active now · since{{end}} {{fmtTime .ActualWake}}</p>
             {{end}}
         </div>
     </div>

@@ -291,7 +291,9 @@ func buildSchedule(date string, dbSessions []dbSession, routineSessions []routin
 		}
 		v := sessionViewFromDB(s)
 		v.Index = len(views)
-		if v.ActualWake != nil && v.ActualSleep != nil {
+		if v.Alone {
+			v.DurationClass = "text-sky-500" // alone duration isn't graded against the nap target
+		} else if v.ActualWake != nil && v.ActualSleep != nil {
 			v.DurationClass = durationClass(v.ActualSleep.Sub(*v.ActualWake), awake)
 		}
 		views = append(views, v)

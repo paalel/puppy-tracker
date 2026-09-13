@@ -183,6 +183,59 @@
 </div>
 {{end}}
 
+{{define "alone-fields"}}
+{{/* expects a SessionView for a home-alone session */}}
+<p class="section-label">Where</p>
+<div class="flex items-center gap-1">
+    <form hx-post="/api/session/{{.ID}}/alone-location" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="cage" type="submit" class="btn-badge {{if eq .AloneLocation "cage"}}bg-indigo-100 text-indigo-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Cage</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/alone-location" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="pen" type="submit" class="btn-badge {{if eq .AloneLocation "pen"}}bg-indigo-100 text-indigo-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Pen</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/alone-location" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="roaming" type="submit" class="btn-badge {{if eq .AloneLocation "roaming"}}bg-indigo-100 text-indigo-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Roaming</button>
+    </form>
+</div>
+<p class="section-label">Sleep</p>
+<div class="flex items-center gap-1">
+    <form hx-post="/api/session/{{.ID}}/alone-slept" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="well" type="submit" class="btn-badge {{if eq .AloneSlept "well"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Slept well</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/alone-slept" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="some" type="submit" class="btn-badge {{if eq .AloneSlept "some"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Some</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/alone-slept" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="none" type="submit" class="btn-badge {{if eq .AloneSlept "none"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Didn't sleep</button>
+    </form>
+</div>
+<p class="section-label">Behaviour</p>
+<div class="flex items-center gap-1">
+    <form hx-post="/api/session/{{.ID}}/alone-behaviour" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="calm" type="submit" class="btn-badge {{if eq .AloneBehaviour "calm"}}bg-emerald-100 text-emerald-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Calm</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/alone-behaviour" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="unsettled" type="submit" class="btn-badge {{if eq .AloneBehaviour "unsettled"}}bg-amber-100 text-amber-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Unsettled</button>
+    </form>
+    <form hx-post="/api/session/{{.ID}}/alone-behaviour" hx-target="#state-container" hx-swap="innerHTML">
+        <button name="value" value="stressed" type="submit" class="btn-badge {{if eq .AloneBehaviour "stressed"}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Stressed</button>
+    </form>
+</div>
+<p class="section-label">Destruction</p>
+<form hx-post="/api/session/{{.ID}}/alone-destroyed" hx-target="#state-container" hx-swap="innerHTML">
+    <button type="submit" class="btn-badge {{if .AloneDestroyed}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">
+        {{if .AloneDestroyed}}Destroyed something{{else}}Nothing destroyed{{end}}
+    </button>
+</form>
+<p class="section-label">Note</p>
+<textarea name="comment" placeholder="Add a note…"
+    hx-post="/api/session/{{.ID}}/comment"
+    hx-target="#state-container" hx-swap="innerHTML" hx-trigger="change"
+    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+    rows="1"
+    class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.Comment}}</textarea>
+{{end}}
+
 {{define "time-adjust"}}
 {{/* expects dict with Endpoint string, Label string, Time *time.Time */}}
 {{if .Time}}
