@@ -223,9 +223,7 @@
 </div>
 <p class="section-label">Destruction</p>
 <form hx-post="/api/session/{{.ID}}/alone-destroyed" hx-target="#state-container" hx-swap="innerHTML">
-    <button type="submit" class="btn-badge {{if .AloneDestroyed}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">
-        {{if .AloneDestroyed}}Destroyed something{{else}}Nothing destroyed{{end}}
-    </button>
+    <button type="submit" class="btn-badge {{if .AloneDestroyed}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Destroyed something</button>
 </form>
 <p class="section-label">Note</p>
 <textarea name="comment" placeholder="Add a note…"
