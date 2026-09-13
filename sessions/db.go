@@ -69,17 +69,36 @@ func logWake(db *sql.DB, date string) error {
 	return err
 }
 
-// startAlone begins a home-alone session now: it closes any open session (she's
-// no longer in the normal cycle) and inserts a new alone session whose woke_at is
-// the departure time.
+// startAlone begins (or resumes) a home-alone session. If the most recent
+// session is a home-alone one, starting again re-opens it — like the undo button
+// — so an accidental "not alone anymore" is corrected and the whole span counts
+// as one home-alone session. Otherwise it closes any open session and opens a new
+// alone session whose woke_at is the departure time.
 func startAlone(db *sql.DB, date string) error {
+	var id, aloneInt int
+	var sleptAt sql.NullString
+	err := db.QueryRow(
+		`SELECT id, COALESCE(alone, 0), slept_at FROM sessions ORDER BY id DESC LIMIT 1`,
+	).Scan(&id, &aloneInt, &sleptAt)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil && aloneInt == 1 {
+		if !sleptAt.Valid {
+			return nil // already home alone
+		}
+		// Re-open the just-ended alone session so the gap counts as alone too.
+		_, err = db.Exec(`UPDATE sessions SET slept_at = NULL WHERE id = ?`, id)
+		return err
+	}
+
 	now := nowUTC()
 	if _, err := db.Exec(
 		`UPDATE sessions SET slept_at = ? WHERE slept_at IS NULL`, now,
 	); err != nil {
 		return err
 	}
-	_, err := db.Exec(
+	_, err = db.Exec(
 		`INSERT INTO sessions (date, woke_at, alone) VALUES (?, ?, 1)`, date, now,
 	)
 	return err
