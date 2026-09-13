@@ -34,6 +34,16 @@ type AloneStats struct {
 	Sessions        []AloneSessionView // recent, newest first
 }
 
+// AloneWeek is one week's home-alone time split by how it went, for a stacked
+// bar chart: volume (total height) and quality (segment mix) at a glance.
+type AloneWeek struct {
+	Label         string `json:"label"`
+	CalmMins      int    `json:"calm"`
+	UnsettledMins int    `json:"unsettled"`
+	StressedMins  int    `json:"stressed"`
+	OtherMins     int    `json:"other"` // unrated
+}
+
 type AloneSessionView struct {
 	Date         string
 	Start        string

@@ -30,6 +30,7 @@ type StatsData struct {
 	Tab                string
 	AccidentStats      *AccidentStats
 	AloneStats         *AloneStats
+	AloneWeeklyJSON    template.JS
 	PoopTimings        []PoopTiming
 	PoopDensitiesJSON  template.JS
 	TotalPoops         int
@@ -67,6 +68,13 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sd.AloneStats = as
+
+		weekly, err := getAloneWeekly(h.db, cfg.Birthdate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.AloneWeeklyJSON = mustJSON(weekly)
 
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)

@@ -234,6 +234,84 @@ func getAloneStats(db *sql.DB) (*AloneStats, error) {
 	return st, rows.Err()
 }
 
+// getAloneWeekly returns home-alone minutes per age-week, split by behaviour,
+// from the first week with any alone session through the current week (empty
+// weeks in between are kept as zero bars so a training gap is visible).
+func getAloneWeekly(db *sql.DB, birthdate *time.Time) ([]AloneWeek, error) {
+	rows, err := db.Query(`
+		SELECT date,
+		       CAST((strftime('%s', slept_at) - strftime('%s', woke_at)) / 60 AS INTEGER),
+		       COALESCE(alone_behaviour, '')
+		FROM sessions
+		WHERE alone = 1 AND woke_at IS NOT NULL AND slept_at IS NOT NULL
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ageWeek := func(t time.Time) int {
+		if birthdate != nil {
+			return int(t.Sub(*birthdate).Hours() / (24 * 7))
+		}
+		return 0
+	}
+
+	weekMap := make(map[int]*AloneWeek)
+	firstWeek, lastWeek := 9999, -1
+	for rows.Next() {
+		var date, behaviour string
+		var mins int
+		if err := rows.Scan(&date, &mins, &behaviour); err != nil {
+			return nil, err
+		}
+		if mins <= 0 {
+			continue
+		}
+		t, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			continue
+		}
+		w := ageWeek(t)
+		if weekMap[w] == nil {
+			weekMap[w] = &AloneWeek{}
+		}
+		switch behaviour {
+		case "calm":
+			weekMap[w].CalmMins += mins
+		case "unsettled":
+			weekMap[w].UnsettledMins += mins
+		case "stressed":
+			weekMap[w].StressedMins += mins
+		default:
+			weekMap[w].OtherMins += mins
+		}
+		if w < firstWeek {
+			firstWeek = w
+		}
+		if w > lastWeek {
+			lastWeek = w
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if lastWeek < 0 {
+		return nil, nil
+	}
+
+	out := make([]AloneWeek, 0, lastWeek-firstWeek+1)
+	for w := firstWeek; w <= lastWeek; w++ {
+		wk := AloneWeek{Label: fmt.Sprintf("Wk %d", w)}
+		if agg := weekMap[w]; agg != nil {
+			wk.CalmMins, wk.UnsettledMins = agg.CalmMins, agg.UnsettledMins
+			wk.StressedMins, wk.OtherMins = agg.StressedMins, agg.OtherMins
+		}
+		out = append(out, wk)
+	}
+	return out, nil
+}
+
 // getAloneByDay aggregates home-alone time per day for the History cards.
 func getAloneByDay(db *sql.DB) (map[string]*DayStat, error) {
 	rows, err := db.Query(`
