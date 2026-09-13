@@ -29,6 +29,7 @@ type StatsData struct {
 	Config             *config.Config
 	Tab                string
 	AccidentStats      *AccidentStats
+	AloneStats         *AloneStats
 	PoopTimings        []PoopTiming
 	PoopDensitiesJSON  template.JS
 	TotalPoops         int
@@ -49,7 +50,7 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tab := r.URL.Query().Get("tab")
-	if tab != "toilet" {
+	if tab != "toilet" && tab != "alone" {
 		tab = "log"
 	}
 
@@ -59,6 +60,14 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	}
 	sd := &StatsData{Days: days, Config: cfg, Tab: tab}
 	switch tab {
+	case "alone":
+		as, err := getAloneStats(h.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.AloneStats = as
+
 	case "toilet":
 		ta, err := getToiletAnalytics(h.db)
 		if err != nil {

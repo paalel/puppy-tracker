@@ -20,6 +20,8 @@
         <div class="flex gap-1 mb-5 bg-stone-100 rounded-xl p-1">
             <a href="/stats" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
                 {{if eq .Tab "log"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">History</a>
+            <a href="/stats?tab=alone" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
+                {{if eq .Tab "alone"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Alone</a>
             <a href="/stats?tab=toilet" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
                 {{if eq .Tab "toilet"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Toilet</a>
         </div>
@@ -29,6 +31,66 @@
             <p class="text-sm text-stone-400">No completed sessions yet.</p>
             <p class="text-xs text-stone-300 mt-1">Stats appear once the first awake cycle is done.</p>
         </div>
+        {{else if eq .Tab "alone"}}
+
+        {{with .AloneStats}}
+        {{if .Count}}
+        {{/* ── Records ─────────────────────────────────────────────────────────── */}}
+        <div class="card px-5 py-3 mb-4">
+            <div class="flex items-center gap-4">
+                <div>
+                    <p class="text-2xl font-bold text-emerald-500">{{fmtMins .LongestGoodMins}}</p>
+                    <p class="text-xs text-stone-400">longest calm</p>
+                </div>
+                <div class="h-8 w-px bg-stone-100"></div>
+                <div>
+                    <p class="text-2xl font-bold text-stone-300">{{fmtMins .LongestAllMins}}</p>
+                    <p class="text-xs text-stone-400">longest overall</p>
+                </div>
+                <div class="ml-auto text-right">
+                    <p class="text-2xl font-bold text-sky-500">{{.Count}}</p>
+                    <p class="text-xs text-stone-400">sessions</p>
+                </div>
+            </div>
+        </div>
+
+        {{/* ── Quality summary ─────────────────────────────────────────────────── */}}
+        <div class="card p-4 mb-4">
+            <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-3">How it's going</p>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="btn-badge bg-emerald-100 text-emerald-700 font-medium">{{.CalmCount}} calm</span>
+                <span class="btn-badge bg-amber-100 text-amber-700 font-medium">{{.UnsettledCount}} unsettled</span>
+                <span class="btn-badge bg-rose-100 text-rose-700 font-medium">{{.StressedCount}} stressed</span>
+                {{if .DestroyedCount}}<span class="btn-badge bg-rose-100 text-rose-700 font-medium">{{.DestroyedCount}}× destruction</span>{{end}}
+            </div>
+        </div>
+
+        {{/* ── History ─────────────────────────────────────────────────────────── */}}
+        <div class="space-y-3">
+        {{range .Sessions}}
+        <div class="card px-5 py-4">
+            <div class="flex items-baseline justify-between mb-1">
+                <span class="text-sm font-semibold text-stone-700">{{dayLabel .Date}} · {{.Start}}</span>
+                <span class="text-sm font-semibold text-sky-500">{{fmtMins .DurationMins}}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
+                {{if .Location}}<span>📍 {{.Location}}</span>{{end}}
+                {{if .Slept}}<span>😴 slept {{.Slept}}</span>{{end}}
+                {{if .Behaviour}}<span class="{{if eq .Behaviour "calm"}}text-emerald-600{{else if eq .Behaviour "stressed"}}text-rose-600{{else}}text-amber-600{{end}}">{{.Behaviour}}</span>{{end}}
+                {{if .Destroyed}}<span class="text-rose-600 font-medium">destroyed something</span>{{end}}
+            </div>
+            {{if .Note}}<p class="text-xs text-stone-400 mt-1.5">{{.Note}}</p>{{end}}
+        </div>
+        {{end}}
+        </div>
+        {{else}}
+        <div class="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-8 text-center">
+            <p class="text-sm text-stone-400">No home-alone sessions yet.</p>
+            <p class="text-xs text-stone-300 mt-1">Tap “Start home alone” on the home screen when you head out.</p>
+        </div>
+        {{end}}
+        {{end}}
+
         {{else if eq .Tab "toilet"}}
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -269,6 +331,12 @@
                 {{if .HardCount}}<span class="text-xs text-rose-600">{{.HardCount}}× hard</span>{{end}}
                 {{if .OvertiredCount}}<span class="text-xs text-rose-600">{{.OvertiredCount}}× overtired</span>{{end}}
                 {{if .AccidentCount}}<span class="text-xs text-rose-700 font-medium ml-auto">{{.AccidentCount}}× accident</span>{{end}}
+            </div>
+            {{end}}
+            {{if .AloneCount}}
+            <div class="flex items-center gap-2 mt-2 pt-2 border-t border-stone-100">
+                <span class="text-xs {{if .AloneConcern}}text-rose-600{{else}}text-sky-600{{end}} font-medium">🏠 {{fmtMins .AloneMins}} home alone{{if gt .AloneCount 1}} · {{.AloneCount}}×{{end}}</span>
+                {{if .AloneConcern}}<span class="text-xs text-rose-400">needs work</span>{{end}}
             </div>
             {{end}}
         </div>

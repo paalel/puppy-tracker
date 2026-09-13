@@ -16,6 +16,33 @@ type DayStat struct {
 	HardCount      int
 	OvertiredCount int
 	AccidentCount  int
+	AloneMins      int  // total home-alone time that day
+	AloneCount     int  // number of home-alone sessions
+	AloneConcern   bool // any session stressed or destructive
+}
+
+// AloneStats summarises home-alone training: the two records plus quality
+// counts and a recent session history.
+type AloneStats struct {
+	Count           int
+	LongestGoodMins int // longest calm, non-destructive session
+	LongestAllMins  int // longest by duration, any quality
+	CalmCount       int
+	UnsettledCount  int
+	StressedCount   int
+	DestroyedCount  int
+	Sessions        []AloneSessionView // recent, newest first
+}
+
+type AloneSessionView struct {
+	Date         string
+	Start        string
+	DurationMins int
+	Location     string
+	Slept        string
+	Behaviour    string
+	Destroyed    bool
+	Note         string
 }
 
 type ChartPoint struct {

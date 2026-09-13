@@ -140,12 +140,135 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 		}
 	}
 
+	// Merge in home-alone time per day for the History cards.
+	aloneByDay, err := getAloneByDay(db)
+	if err != nil {
+		return nil, err
+	}
+	for i := range days {
+		if a := aloneByDay[days[i].Date]; a != nil {
+			days[i].AloneMins = a.AloneMins
+			days[i].AloneCount = a.AloneCount
+			days[i].AloneConcern = a.AloneConcern
+		}
+	}
+
 	return days, nil
 }
 
 type AccidentStats struct {
 	CurrentStreak int
 	RecordStreak  int
+}
+
+// getAloneStats summarises completed home-alone sessions: the two records
+// (longest good = calm and non-destructive; longest overall), quality counts,
+// and a recent session history (newest first, capped).
+func getAloneStats(db *sql.DB) (*AloneStats, error) {
+	rows, err := db.Query(`
+		SELECT date, woke_at, slept_at,
+		       COALESCE(alone_slept, ''), COALESCE(alone_behaviour, ''),
+		       COALESCE(alone_location, ''), COALESCE(alone_destroyed, 0), COALESCE(comment, '')
+		FROM sessions
+		WHERE alone = 1 AND woke_at IS NOT NULL AND slept_at IS NOT NULL
+		ORDER BY woke_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	const historyLimit = 12
+	st := &AloneStats{}
+	for rows.Next() {
+		var date, wokeRaw, sleptRaw, slept, behaviour, location, note string
+		var destroyedInt int
+		if err := rows.Scan(&date, &wokeRaw, &sleptRaw, &slept, &behaviour, &location, &destroyedInt, &note); err != nil {
+			return nil, err
+		}
+		woke, err := parseTimestamp(wokeRaw)
+		if err != nil {
+			continue
+		}
+		end, err := parseTimestamp(sleptRaw)
+		if err != nil {
+			continue
+		}
+		mins := int(end.Sub(woke).Minutes())
+		if mins < 0 {
+			continue
+		}
+		destroyed := destroyedInt == 1
+
+		st.Count++
+		if mins > st.LongestAllMins {
+			st.LongestAllMins = mins
+		}
+		if behaviour == "calm" && !destroyed && mins > st.LongestGoodMins {
+			st.LongestGoodMins = mins
+		}
+		switch behaviour {
+		case "calm":
+			st.CalmCount++
+		case "unsettled":
+			st.UnsettledCount++
+		case "stressed":
+			st.StressedCount++
+		}
+		if destroyed {
+			st.DestroyedCount++
+		}
+		if len(st.Sessions) < historyLimit {
+			st.Sessions = append(st.Sessions, AloneSessionView{
+				Date:         date,
+				Start:        woke.Local().Format("15:04"),
+				DurationMins: mins,
+				Location:     location,
+				Slept:        slept,
+				Behaviour:    behaviour,
+				Destroyed:    destroyed,
+				Note:         note,
+			})
+		}
+	}
+	return st, rows.Err()
+}
+
+// getAloneByDay aggregates home-alone time per day for the History cards.
+func getAloneByDay(db *sql.DB) (map[string]*DayStat, error) {
+	rows, err := db.Query(`
+		SELECT date,
+		       CAST((strftime('%s', slept_at) - strftime('%s', woke_at)) / 60 AS INTEGER),
+		       COALESCE(alone_behaviour, ''), COALESCE(alone_destroyed, 0)
+		FROM sessions
+		WHERE alone = 1 AND woke_at IS NOT NULL AND slept_at IS NOT NULL
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byDate := map[string]*DayStat{}
+	for rows.Next() {
+		var date, behaviour string
+		var mins, destroyed int
+		if err := rows.Scan(&date, &mins, &behaviour, &destroyed); err != nil {
+			return nil, err
+		}
+		d := byDate[date]
+		if d == nil {
+			d = &DayStat{}
+			byDate[date] = d
+		}
+		if mins > 0 {
+			d.AloneMins += mins
+		}
+		d.AloneCount++
+		if behaviour == "stressed" || destroyed == 1 {
+			d.AloneConcern = true
+		}
+	}
+	return byDate, rows.Err()
 }
 
 func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
