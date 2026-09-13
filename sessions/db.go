@@ -14,14 +14,23 @@ func nowUTC() string                             { return store.NowUTC() }
 
 func getState(db *sql.DB) (*puppyState, error) {
 	var wokeAt, crateAt, sleptAt sql.NullString
+	var alone bool
 	err := db.QueryRow(
-		`SELECT woke_at, crate_at, slept_at FROM sessions ORDER BY date DESC, id DESC LIMIT 1`,
-	).Scan(&wokeAt, &crateAt, &sleptAt)
+		`SELECT woke_at, crate_at, slept_at, COALESCE(alone,0) FROM sessions ORDER BY date DESC, id DESC LIMIT 1`,
+	).Scan(&wokeAt, &crateAt, &sleptAt, &alone)
 	if err == sql.ErrNoRows {
 		return &puppyState{Phase: PhaseSleeping, PhaseStartedAt: time.Now()}, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	// An open home-alone session takes over regardless of crate/sleep columns.
+	if alone && !sleptAt.Valid {
+		t, err := parseTimestamp(wokeAt.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse alone woke_at: %w", err)
+		}
+		return &puppyState{Phase: PhaseAlone, PhaseStartedAt: t}, nil
 	}
 	if sleptAt.Valid {
 		t, err := parseTimestamp(sleptAt.String)
@@ -56,6 +65,30 @@ func logWake(db *sql.DB, date string) error {
 	_, err := db.Exec(
 		`INSERT INTO sessions (date, woke_at, routine_session_id) VALUES (?, ?, ?)`,
 		date, nowUTC(), routineSessionID,
+	)
+	return err
+}
+
+// startAlone begins a home-alone session now: it closes any open session (she's
+// no longer in the normal cycle) and inserts a new alone session whose woke_at is
+// the departure time.
+func startAlone(db *sql.DB, date string) error {
+	now := nowUTC()
+	if _, err := db.Exec(
+		`UPDATE sessions SET slept_at = ? WHERE slept_at IS NULL`, now,
+	); err != nil {
+		return err
+	}
+	_, err := db.Exec(
+		`INSERT INTO sessions (date, woke_at, alone) VALUES (?, ?, 1)`, date, now,
+	)
+	return err
+}
+
+// endAlone closes the open home-alone session (she's back) by stamping slept_at.
+func endAlone(db *sql.DB) error {
+	_, err := db.Exec(
+		`UPDATE sessions SET slept_at = ? WHERE alone = 1 AND slept_at IS NULL`, nowUTC(),
 	)
 	return err
 }
@@ -203,7 +236,11 @@ func getSessionsForDate(db *sql.DB, date string) ([]dbSession, error) {
 		       COALESCE(calm_winddown, 0),
 		       COALESCE(environmental_activity, 0),
 		       COALESCE(excluded, 0),
-		       COALESCE(alone, 0)
+		       COALESCE(alone, 0),
+		       COALESCE(alone_slept, ''),
+		       COALESCE(alone_behaviour, ''),
+		       COALESCE(alone_location, ''),
+		       COALESCE(alone_destroyed, 0)
 		FROM sessions WHERE date = ? ORDER BY id ASC`, date)
 	if err != nil {
 		return nil, err
@@ -218,12 +255,14 @@ func getSessionsForDate(db *sql.DB, date string) ([]dbSession, error) {
 		var routineSessionID sql.NullInt64
 		var overtiredInt, peeInt, poopInt, accidentInt int
 		var physicalInt, mentalInt, calmInt, environmentalInt, excludedInt, aloneInt int
+		var aloneDestroyedInt int
 		if err := rows.Scan(
 			&s.ID, &routineSessionID, &wokeAt, &crateAt, &sleptAt,
 			&s.Comment, &s.SleepEase, &overtiredInt,
 			&peeInt, &poopInt, &accidentInt,
 			&s.TrainingQuality,
 			&physicalInt, &mentalInt, &calmInt, &environmentalInt, &excludedInt, &aloneInt,
+			&s.AloneSlept, &s.AloneBehaviour, &s.AloneLocation, &aloneDestroyedInt,
 		); err != nil {
 			return nil, err
 		}
@@ -241,6 +280,7 @@ func getSessionsForDate(db *sql.DB, date string) ([]dbSession, error) {
 		s.EnvironmentalActivity = environmentalInt == 1
 		s.Excluded = excludedInt == 1
 		s.Alone = aloneInt == 1
+		s.AloneDestroyed = aloneDestroyedInt == 1
 		if t, err := parseTimestamp(wokeAt); err == nil {
 			s.WokeAt = &t
 		}

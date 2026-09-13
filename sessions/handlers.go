@@ -28,6 +28,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/state", h.handleGetState)
 	mux.HandleFunc("POST /api/phase", h.handlePostPhase)
 	mux.HandleFunc("POST /api/phase/undo", h.handleUndoPhase)
+	mux.HandleFunc("POST /api/alone/start", h.handleStartAlone)
+	mux.HandleFunc("POST /api/alone/end", h.handleEndAlone)
 	mux.HandleFunc("POST /api/wake-adjust", h.handleAdjustSessionTime("woke_at"))
 	mux.HandleFunc("POST /api/crate-adjust", h.handleAdjustSessionTime("crate_at"))
 	mux.HandleFunc("POST /api/sleep-adjust", h.handleAdjustSessionTime("slept_at"))
@@ -124,6 +126,24 @@ func (h *Handler) handlePostPhase(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleUndoPhase(w http.ResponseWriter, r *http.Request) {
 	if err := undoPhase(h.db); err != nil {
 		log.Printf("handleUndoPhase: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderStateFragment(w)
+}
+
+func (h *Handler) handleStartAlone(w http.ResponseWriter, r *http.Request) {
+	if err := startAlone(h.db, wakeDate()); err != nil {
+		log.Printf("startAlone: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderStateFragment(w)
+}
+
+func (h *Handler) handleEndAlone(w http.ResponseWriter, r *http.Request) {
+	if err := endAlone(h.db); err != nil {
+		log.Printf("endAlone: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

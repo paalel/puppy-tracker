@@ -8,6 +8,22 @@ const (
 	PhaseActive   Phase = "ACTIVE"
 	PhaseCrating  Phase = "CRATING"
 	PhaseSleeping Phase = "SLEEPING"
+	PhaseAlone    Phase = "ALONE"
+)
+
+// Home-alone quality values.
+const (
+	SleptWell = "well"
+	SleptSome = "some"
+	SleptNone = "none"
+
+	BehaviourCalm      = "calm"
+	BehaviourUnsettled = "unsettled"
+	BehaviourStressed  = "stressed"
+
+	LocationCage    = "cage"
+	LocationPen     = "pen"
+	LocationRoaming = "roaming"
 )
 
 type puppyState struct {
@@ -34,6 +50,10 @@ type dbSession struct {
 	EnvironmentalActivity bool
 	Excluded              bool
 	Alone                 bool
+	AloneSlept            string
+	AloneBehaviour        string
+	AloneLocation         string
+	AloneDestroyed        bool
 }
 
 type SessionView struct {
@@ -67,6 +87,10 @@ type SessionView struct {
 	SettleDuration        string
 	Excluded              bool
 	Alone                 bool
+	AloneSlept            string
+	AloneBehaviour        string
+	AloneLocation         string
+	AloneDestroyed        bool
 	PoopLikelihood        float64
 	PoopLo                float64
 	PoopHi                float64

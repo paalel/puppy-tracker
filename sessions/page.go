@@ -395,6 +395,10 @@ func sessionViewFromDB(s dbSession) SessionView {
 		EnvironmentalActivity: s.EnvironmentalActivity,
 		Excluded:              s.Excluded,
 		Alone:                 s.Alone,
+		AloneSlept:            s.AloneSlept,
+		AloneBehaviour:        s.AloneBehaviour,
+		AloneLocation:         s.AloneLocation,
+		AloneDestroyed:        s.AloneDestroyed,
 	}
 	if aw != nil && as != nil {
 		v.ActualDuration = formatDuration(as.Sub(*aw))
