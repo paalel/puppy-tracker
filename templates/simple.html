@@ -114,7 +114,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 
 {{/* ══════════════════ card-poop (VM: poopVM) ══════════════════ */}}
 {{define "card-poop"}}
-<section id="card-poop" data-card="poop" data-open="false" aria-label="Poop" style="order:{{.Order}}"
+<section id="card-poop" data-card="poop" data-open="false" aria-label="Poop" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
          class="group/card overflow-hidden rounded-2xl border border-stone-200 bg-white">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
@@ -157,7 +157,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 
 {{/* ══════════════════ card-sleep (VM: sleepVM) ══════════════════ */}}
 {{define "card-sleep"}}
-<section id="card-sleep" data-card="sleep" data-open="false" aria-label="Sleep" style="order:{{.Order}}"
+<section id="card-sleep" data-card="sleep" data-open="false" aria-label="Sleep" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
          class="group/card overflow-hidden rounded-2xl border {{if .Running}}border-indigo-200 bg-indigo-50{{else}}border-stone-200 bg-white{{end}}">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
@@ -206,7 +206,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 
 {{/* ══════════════════ card-alone (VM: aloneVM) ══════════════════ */}}
 {{define "card-alone"}}
-<section id="card-alone" data-card="alone" data-open="false" aria-label="Home alone" style="order:{{.Order}}"
+<section id="card-alone" data-card="alone" data-open="false" aria-label="Home alone" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
          class="group/card overflow-hidden rounded-2xl border {{if .Running}}border-sky-200{{else}}border-stone-200{{end}} bg-white">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5{{if .Running}} bg-sky-50{{end}}">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
@@ -364,7 +364,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 
 {{/* ══════════════════ card-outings (VM: outingsVM) ══════════════════ */}}
 {{define "card-outings"}}
-<section id="card-outings" data-card="outings" data-open="false" aria-label="Outings" style="order:{{.Order}}"
+<section id="card-outings" data-card="outings" data-open="false" aria-label="Outings" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
          class="group/card overflow-hidden rounded-2xl border border-stone-200 bg-white">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">

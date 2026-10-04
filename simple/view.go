@@ -28,6 +28,7 @@ type pageVM struct {
 
 type poopVM struct {
 	Order     int
+	OOB       bool
 	Poops     []Poop
 	Count     int        // poop entries (excludes accidents)
 	Accidents int        // accident entries
@@ -37,6 +38,7 @@ type poopVM struct {
 
 type sleepVM struct {
 	Order     int
+	OOB       bool
 	Running   *Nap
 	Naps      []Nap // completed, chronological
 	Count     int
@@ -47,6 +49,7 @@ type sleepVM struct {
 
 type aloneVM struct {
 	Order    int
+	OOB      bool
 	Running  *AloneSession
 	Sessions []AloneSession // completed today, newest first
 	Records  AloneRecords
@@ -60,6 +63,7 @@ type aloneVM struct {
 
 type outingsVM struct {
 	Order   int
+	OOB     bool
 	Outings []Outing
 	Last    *Outing
 	IsToday bool
@@ -118,13 +122,8 @@ func (h *Handler) buildPage(date string) (*pageVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Share one order computation across the cards.
-	orders := computeOrders(sleep.Running, alone.Running)
-	poop.Order = orders["poop"]
-	sleep.Order = orders["sleep"]
-	alone.Order = orders["alone"]
-	outings.Order = orders["outings"]
-	return &pageVM{Config: cfg, Date: date, PrevDate: "", NextDate: "", Poop: poop, Sleep: sleep, Alone: alone, Outings: outings}, nil
+	// Each builder computes its own order (so single-card swaps stay correct).
+	return &pageVM{Config: cfg, Date: date, Poop: poop, Sleep: sleep, Alone: alone, Outings: outings}, nil
 }
 
 func (h *Handler) buildPoop(date string) (*poopVM, error) {
@@ -167,6 +166,13 @@ func (h *Handler) buildSleep(date string) (*sleepVM, error) {
 		vm.Woke = &end
 	}
 	if vm.IsToday {
+		ra, err := runningAlone(h.db)
+		if err != nil {
+			return nil, err
+		}
+		vm.Order = computeOrders(running, ra)["sleep"]
+	}
+	if vm.IsToday {
 		vm.Running = running
 	}
 	return vm, nil
@@ -200,6 +206,13 @@ func (h *Handler) buildAlone(date string, editID int) (*aloneVM, error) {
 	if vm.IsToday && running != nil {
 		vm.Running = running
 		vm.TargetMin, vm.TargetLabel = progressTarget(running, rec)
+	}
+	if vm.IsToday {
+		rn, err := runningNap(h.db)
+		if err != nil {
+			return nil, err
+		}
+		vm.Order = computeOrders(rn, running)["alone"]
 	}
 	return vm, nil
 }

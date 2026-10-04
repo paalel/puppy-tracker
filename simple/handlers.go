@@ -23,8 +23,31 @@ func New(db *sql.DB, tmpl *template.Template) *Handler {
 	return &Handler{db: db, tmpl: tmpl}
 }
 
-// RegisterRoutes registers the simplified action/fragment routes (added next stage).
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {}
+// RegisterRoutes registers the simplified action/fragment routes.
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /simple/poops", h.handlePoopAdd)
+	mux.HandleFunc("DELETE /simple/poops/{id}", h.handlePoopDelete)
+
+	mux.HandleFunc("POST /simple/naps/start", h.handleNapStart)
+	mux.HandleFunc("POST /simple/naps/stop", h.handleNapStop)
+	mux.HandleFunc("POST /simple/naps/discard", h.handleNapDiscard)
+	mux.HandleFunc("DELETE /simple/naps/{id}", h.handleNapDelete)
+
+	mux.HandleFunc("POST /simple/alone/start", h.handleAloneStart)
+	mux.HandleFunc("POST /simple/alone/stop", h.handleAloneStop)
+	mux.HandleFunc("PATCH /simple/alone/{id}", h.handleAlonePatch)
+	mux.HandleFunc("DELETE /simple/alone/{id}", h.handleAloneDelete)
+	mux.HandleFunc("GET /simple/alone/card", h.handleAloneCard)
+
+	mux.HandleFunc("GET /simple/outings/new", h.handleOutingNew)
+	mux.HandleFunc("GET /simple/outings/{id}/edit", h.handleOutingEdit)
+	mux.HandleFunc("POST /simple/outings", h.handleOutingCreate)
+	mux.HandleFunc("PUT /simple/outings/{id}", h.handleOutingUpdate)
+	mux.HandleFunc("DELETE /simple/outings/{id}", h.handleOutingDelete)
+	mux.HandleFunc("GET /simple/outings/card", h.handleOutingsCard)
+
+	mux.HandleFunc("POST /simple/undo/{token}", h.handleUndo)
+}
 
 // Index renders the simplified Today screen for the requested date (defaulting
 // to today, and never past today), with day-at-a-time navigation.
