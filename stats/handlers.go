@@ -93,7 +93,7 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		sd.AccidentStats = as
 
 		for _, d := range days {
-			sd.TotalAccidents += d.AccidentCount
+			sd.TotalAccidents += d.AccidentCount + d.SimpleAccidents
 		}
 		weekly, err := getAccidentWeekly(h.db, cfg.Birthdate)
 		if err != nil {

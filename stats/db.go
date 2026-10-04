@@ -452,29 +452,40 @@ func getAloneByDay(db *sql.DB) (map[string]*DayStat, error) {
 	return byDate, rows.Err()
 }
 
-func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
-	// Collect all accident timestamps in order.
-	rows, err := db.Query(`
-		SELECT woke_at FROM sessions
-		WHERE toilet_accident = 1 AND woke_at IS NOT NULL AND COALESCE(alone, 0) = 0
-		ORDER BY woke_at ASC
-	`)
-	if err != nil {
+// accidentTimes returns all accident timestamps from BOTH classic sessions and
+// the simplified poops table (kind='accident'), parsed as UTC and sorted.
+func accidentTimes(db *sql.DB) ([]time.Time, error) {
+	var out []time.Time
+	collect := func(query string) error {
+		rows, err := db.Query(query)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var s string
+			if err := rows.Scan(&s); err != nil {
+				return err
+			}
+			if t, err := parseTimestamp(s); err == nil {
+				out = append(out, t)
+			}
+		}
+		return rows.Err()
+	}
+	if err := collect(`SELECT woke_at FROM sessions WHERE toilet_accident = 1 AND woke_at IS NOT NULL AND COALESCE(alone,0) = 0`); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var accidents []time.Time
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, err
-		}
-		if t, err := parseTimestamp(s); err == nil {
-			accidents = append(accidents, t)
-		}
+	if err := collect(`SELECT at FROM poops WHERE kind = 'accident' AND deleted_at IS NULL`); err != nil {
+		return nil, err
 	}
-	if err := rows.Err(); err != nil {
+	sort.Slice(out, func(i, j int) bool { return out[i].Before(out[j]) })
+	return out, nil
+}
+
+func getAccidentStats(db *sql.DB) (*AccidentStats, error) {
+	accidents, err := accidentTimes(db)
+	if err != nil {
 		return nil, err
 	}
 
@@ -538,43 +549,69 @@ const recencyHalfLifeDays = 28
 // wobs is a recency-weighted observation: a local fractional hour with a weight.
 type wobs struct{ h, w float64 }
 
-// getToiletAnalytics groups poops by their ordinal within each day (1st, 2nd, …)
-// and summarises each ordinal's timing as median + interquartile range. Ordinals
-// with fewer than minTimingSamples observations are dropped rather than shown noisily.
-func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
-	// Select raw UTC timestamps and convert to local time in Go — SQLite's
-	// 'localtime' modifier uses the server's zone (UTC on Fly), which would
-	// show poop times two hours early. store.ParseTimestamp + .Local() is the
-	// same path the rest of the app uses for correct Norwegian time.
-	rows, err := db.Query(`
-		SELECT date, woke_at FROM sessions
-		WHERE toilet_poop = 1 AND woke_at IS NOT NULL
-		  AND COALESCE(excluded, 0) = 0 AND COALESCE(alone, 0) = 0
-		ORDER BY woke_at ASC
-	`)
-	if err != nil {
-		return nil, err
+// poopEventsByDay gathers poop timestamps from classic sessions and the simplified
+// poops table, grouped by day and sorted by time within each day. Returns the
+// per-day times and the total count.
+func poopEventsByDay(db *sql.DB) (map[string][]time.Time, int, error) {
+	perDay := map[string][]time.Time{}
+	add := func(day, raw string) {
+		if t, err := parseTimestamp(raw); err == nil {
+			perDay[day] = append(perDay[day], t.Local())
+		}
 	}
-	defer rows.Close()
 
-	// Group poop times (as local fractional hours) by day, preserving order so
-	// each day's slice is already sorted; the index within a day is its ordinal.
-	perDay := map[string][]float64{}
-	total := 0
-	for rows.Next() {
-		var date, wokeRaw string
-		if err := rows.Scan(&date, &wokeRaw); err != nil {
-			return nil, err
-		}
-		t, err := parseTimestamp(wokeRaw)
-		if err != nil {
-			continue
-		}
-		lt := t.Local()
-		perDay[date] = append(perDay[date], float64(lt.Hour())+float64(lt.Minute())/60.0)
-		total++
+	rows, err := db.Query(`SELECT date, woke_at FROM sessions
+		WHERE toilet_poop = 1 AND woke_at IS NOT NULL
+		  AND COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0`)
+	if err != nil {
+		return nil, 0, err
 	}
+	for rows.Next() {
+		var d, w string
+		if err := rows.Scan(&d, &w); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		add(d, w)
+	}
+	rows.Close()
 	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	pr, err := db.Query(`SELECT day, at FROM poops WHERE kind = 'poop' AND deleted_at IS NULL`)
+	if err != nil {
+		return nil, 0, err
+	}
+	for pr.Next() {
+		var d, a string
+		if err := pr.Scan(&d, &a); err != nil {
+			pr.Close()
+			return nil, 0, err
+		}
+		add(d, a)
+	}
+	pr.Close()
+	if err := pr.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	total := 0
+	for day := range perDay {
+		ts := perDay[day]
+		sort.Slice(ts, func(i, j int) bool { return ts[i].Before(ts[j]) })
+		total += len(ts)
+	}
+	return perDay, total, nil
+}
+
+func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
+	// Poop events come from BOTH versions: classic sessions (toilet_poop) and the
+	// simplified poops table. Timestamps are converted to local in Go (SQLite's
+	// 'localtime' is UTC on the server), then grouped and sorted per day so the
+	// ordinal (1st/2nd/…) is correct across the two sources.
+	perDay, total, err := poopEventsByDay(db)
+	if err != nil {
 		return nil, err
 	}
 
@@ -589,7 +626,8 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 	byOrdinal := map[int][]wobs{}
 	for date, times := range perDay {
 		w := dayWeight[date]
-		for i, hf := range times {
+		for i, t := range times {
+			hf := float64(t.Hour()) + float64(t.Minute())/60.0
 			byOrdinal[i+1] = append(byOrdinal[i+1], wobs{h: hf, w: w})
 		}
 	}
@@ -630,13 +668,18 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 	return ta, nil
 }
 
-// trackedDayWeights returns a recency weight per tracked day (distinct date with a
-// non-excluded, non-alone session) and their sum. Weights decay from the most
-// recent tracked day so recent behaviour dominates the poop stats.
+// trackedDayWeights returns a recency weight per tracked day and their sum. A day
+// counts only if it has real tracking — a classic (non-alone) session OR any
+// simplified poop/nap/outing entry — so days with no tracking at all are excluded
+// from the poop-probability denominator (they were never marked, just untracked).
+// Weights decay from the most recent tracked day so recent behaviour dominates.
 func trackedDayWeights(db *sql.DB) (map[string]float64, float64, error) {
-	rows, err := db.Query(
-		`SELECT DISTINCT date FROM sessions WHERE COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0`,
-	)
+	rows, err := db.Query(`
+		SELECT DISTINCT date FROM sessions WHERE COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0
+		UNION SELECT DISTINCT day FROM poops   WHERE deleted_at IS NULL
+		UNION SELECT DISTINCT day FROM naps    WHERE deleted_at IS NULL
+		UNION SELECT DISTINCT day FROM outings WHERE deleted_at IS NULL
+	`)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -856,24 +899,13 @@ func getAccidentWeekly(db *sql.DB, birthdate *time.Time) ([]ChartPoint, error) {
 		return int(t.Sub(firstTime).Hours() / (24 * 7))
 	}
 
-	rows, err := db.Query(`SELECT woke_at FROM sessions WHERE toilet_accident = 1 AND COALESCE(alone, 0) = 0`)
+	accidents, err := accidentTimes(db)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	accByWeek := make(map[int]int)
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, err
-		}
-		if t, err := parseTimestamp(s); err == nil {
-			accByWeek[ageWeek(t)]++
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	for _, t := range accidents {
+		accByWeek[ageWeek(t)]++
 	}
 
 	first := ageWeek(firstTime)
