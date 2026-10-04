@@ -577,13 +577,19 @@ func getHoursSinceLastPoop(db *sql.DB) (float64, error) {
 	return hours.Float64, nil
 }
 
+// maxPlausiblePoopGapHours bounds a meaningful prediction. A grown dog poops at
+// least daily, so a longer gap means a missed log or a tracking lapse, not a real
+// hold — predicting that far past the training range just extrapolates nonsense,
+// so we hide the chance instead of showing a confident-looking number.
+const maxPlausiblePoopGapHours = 30
+
 // PoopChance returns the current P(poop) as a whole percentage for the simplified
 // card. The model is trained on classic history (the physiology still holds); the
 // live input — hours since the last poop — includes simplified poops. ok is false
-// when there isn't enough history to predict.
+// when there isn't enough history, or the last poop is implausibly old (a gap).
 func PoopChance(db *sql.DB) (pct int, ok bool) {
 	hsp, err := getHoursSinceLastPoop(db)
-	if err != nil || hsp < 0 {
+	if err != nil || hsp < 0 || hsp > maxPlausiblePoopGapHours {
 		return 0, false
 	}
 	data, err := loadTrainingData(db)
