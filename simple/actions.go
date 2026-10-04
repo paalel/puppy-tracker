@@ -243,21 +243,29 @@ func (h *Handler) handleAlonePatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	var err error
 	switch {
 	case r.Form.Has("where"):
-		_ = setAloneChoice(h.db, id, "alone_location", r.FormValue("where"))
+		err = setAloneChoice(h.db, id, "alone_location", r.FormValue("where"))
 	case r.Form.Has("sleep"):
-		_ = setAloneChoice(h.db, id, "alone_slept", r.FormValue("sleep"))
+		err = setAloneChoice(h.db, id, "alone_slept", r.FormValue("sleep"))
 	case r.Form.Has("behaviour"):
-		_ = setAloneChoice(h.db, id, "alone_behaviour", r.FormValue("behaviour"))
+		err = setAloneChoice(h.db, id, "alone_behaviour", r.FormValue("behaviour"))
 	case r.Form.Has("destroyed"):
-		_ = toggleAloneDestroyed(h.db, id)
+		err = toggleAloneDestroyed(h.db, id)
 	case r.Form.Has("note"):
-		_ = setAloneNote(h.db, id, r.FormValue("note"))
+		if err := setAloneNote(h.db, id, r.FormValue("note")); err != nil {
+			h.fail(w, "set note", err)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent) // hx-swap="none"; nothing to re-render
 		return
 	default:
 		http.Error(w, "no field", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		h.fail(w, "update alone", err)
 		return
 	}
 	h.respond(w, "alone", nil)
@@ -367,30 +375,28 @@ func (h *Handler) handleOutingsCard(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleUndo(w http.ResponseWriter, r *http.Request) {
 	verb, id := parseToken(r.PathValue("token"))
 	var card string
+	var err error
 	switch verb {
 	case "del-poop":
-		_ = softDelete(h.db, "poops", id)
-		card = "poop"
+		err, card = softDelete(h.db, "poops", id), "poop"
 	case "undel-poop":
-		_ = restore(h.db, "poops", id)
-		card = "poop"
+		err, card = restore(h.db, "poops", id), "poop"
 	case "resume-nap":
-		_ = resumeNap(h.db, id)
-		card = "sleep"
+		err, card = resumeNap(h.db, id), "sleep"
 	case "undel-nap":
-		_ = restore(h.db, "naps", id)
-		card = "sleep"
+		err, card = restore(h.db, "naps", id), "sleep"
 	case "resume-alone":
-		_ = resumeAlone(h.db, id)
-		card = "alone"
+		err, card = resumeAlone(h.db, id), "alone"
 	case "undel-alone":
-		_ = restoreAlone(h.db, id)
-		card = "alone"
+		err, card = restoreAlone(h.db, id), "alone"
 	case "undel-outing":
-		_ = restore(h.db, "outings", id)
-		card = "outings"
+		err, card = restore(h.db, "outings", id), "outings"
 	default:
 		http.Error(w, "bad token", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		h.fail(w, "undo", err)
 		return
 	}
 	h.respond(w, card, nil)
