@@ -65,7 +65,7 @@ function restoreOpen(root) {
   const s = openSet();
   root.querySelectorAll('[data-card]').forEach(c => { if (s.has(c.dataset.card)) setOpen(c, true); });
 }
-document.addEventListener('htmx:afterSwap', e => restoreOpen(e.detail.elt.parentElement || document));
+document.addEventListener('htmx:afterSwap', e => { restoreOpen(e.detail.elt.parentElement || document); tick(); });
 restoreOpen(document);
 
 const pad = n => String(n).padStart(2, '0');
@@ -204,7 +204,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Home alone
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
       <span class="max-w-full truncate text-[15px] leading-5{{if .Running}} text-sky-700{{end}}">
-        {{if .Running}}Alone since {{clock .Running.Started}}{{else if .TodayMin}}{{dur .TodayMin}} alone today{{else}}None yet today{{end}}
+        {{if .Running}}Alone since {{clock .Running.Started}}{{else if .Sessions}}{{dur .TodayMin}} alone today{{else}}None yet today{{end}}
       </span>
     </button>
     {{if and .IsToday (not .Running)}}

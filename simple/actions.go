@@ -434,6 +434,9 @@ func filterTags(got, allowed []string) []string {
 }
 
 func durStr(m int) string {
+	if m <= 0 {
+		return "<1m"
+	}
 	if m < 60 {
 		return fmt.Sprintf("%dm", m)
 	}

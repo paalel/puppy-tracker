@@ -49,7 +49,10 @@ func parseTemplates() (*template.Template, error) {
 			return int(time.Since(*t).Minutes())
 		},
 		// Simplified-app formatters.
-		"dur": func(mins int) string { // "40m", "1h 27m", "2h"
+		"dur": func(mins int) string { // "<1m", "40m", "1h 27m", "2h"
+			if mins <= 0 {
+				return "<1m"
+			}
 			if mins < 60 {
 				return fmt.Sprintf("%dm", mins)
 			}
