@@ -35,6 +35,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /simple/alone/start", h.handleAloneStart)
 	mux.HandleFunc("POST /simple/alone/stop", h.handleAloneStop)
+	mux.HandleFunc("POST /simple/alone/discard", h.handleAloneDiscard)
 	mux.HandleFunc("PATCH /simple/alone/{id}", h.handleAlonePatch)
 	mux.HandleFunc("DELETE /simple/alone/{id}", h.handleAloneDelete)
 	mux.HandleFunc("GET /simple/alone/card", h.handleAloneCard)

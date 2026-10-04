@@ -216,6 +216,27 @@ func (h *Handler) handleAloneStop(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) handleAloneDiscard(w http.ResponseWriter, r *http.Request) {
+	a, err := runningAlone(h.db)
+	if err != nil {
+		h.fail(w, "discard alone", err)
+		return
+	}
+	if a == nil {
+		h.respond(w, "alone", nil)
+		return
+	}
+	if err := deleteAlone(h.db, a.ID); err != nil {
+		h.fail(w, "discard alone", err)
+		return
+	}
+	h.respond(w, "alone", &toastVM{
+		Msg:    "Home alone discarded",
+		Token:  "undel-alone:" + strconv.Itoa(a.ID),
+		Target: "#card-alone",
+	})
+}
+
 func (h *Handler) handleAlonePatch(w http.ResponseWriter, r *http.Request) {
 	id := pathID(r)
 	if err := r.ParseForm(); err != nil {

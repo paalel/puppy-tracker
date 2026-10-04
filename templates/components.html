@@ -59,20 +59,13 @@
 {{end}}
 
 {{define "nav"}}
-{{/* . is the active page name: "home", "camera", "stats", "settings" */}}
+{{/* . is the active page name: "home", "stats", "settings" */}}
 <nav class="fixed bottom-0 inset-x-0 bg-white border-t border-stone-100 z-40"
      style="padding-bottom: env(safe-area-inset-bottom)">
     <div class="max-w-md mx-auto flex">
         <a href="/" class="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors {{if eq . "home"}}text-indigo-600{{else}}text-stone-400{{end}}">
             <span class="text-lg leading-none">⌂</span>
             <span class="text-[10px] font-medium">Home</span>
-        </a>
-        <a href="/camera" class="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors {{if eq . "camera"}}text-indigo-600{{else}}text-stone-400{{end}}">
-            <span class="relative inline-flex">
-                <span class="text-lg leading-none">◎</span>
-                <span id="nav-presence-dot" class="absolute -top-1 -right-2 text-[10px] leading-none hidden">🐶</span>
-            </span>
-            <span class="text-[10px] font-medium">Camera</span>
         </a>
         <a href="/stats" class="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors {{if eq . "stats"}}text-indigo-600{{else}}text-stone-400{{end}}">
             <span class="text-lg leading-none">◈</span>
@@ -84,22 +77,6 @@
         </a>
     </div>
 </nav>
-<script>
-(function() {
-    var dot = document.getElementById('nav-presence-dot');
-    if (!dot) return;
-    function update() {
-        fetch('/api/camera/pen/presence')
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                dot.classList.toggle('hidden', !d.present || d.stale);
-            })
-            .catch(function() {});
-    }
-    update();
-    setInterval(update, 30000);
-})();
-</script>
 {{end}}
 
 {{define "undo-phase"}}{{end}}

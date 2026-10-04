@@ -10,19 +10,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Puppy">
     <meta name="theme-color" content="#1c1917">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600&display=swap">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      tailwind.config = { theme: { extend: {
-        fontFamily: { sans: ['"Albert Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
-        colors: { page: '#F7F6F3' }
-      } } };
+      tailwind.config = { theme: { extend: { colors: { page: '#F7F6F3' } } } };
     </script>
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
 </head>
-<body class="bg-page font-sans text-stone-900 antialiased">
+<body class="bg-page text-stone-900 antialiased">
 
 <main class="mx-auto flex max-w-[390px] flex-col gap-3 px-[18px] pb-28 pt-6">
 
@@ -125,6 +119,8 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       </span>
     </button>
     {{if .IsToday}}
+    <button hx-post="/simple/poops" hx-vals='{"kind":"accident"}' hx-target="#card-poop" hx-swap="outerHTML"
+            class="h-9 shrink-0 rounded-full border border-rose-200 bg-rose-50 px-3 text-[13px] font-medium text-rose-800">Accident</button>
     <button hx-post="/simple/poops" hx-vals='{"kind":"poop"}' hx-target="#card-poop" hx-swap="outerHTML"
             class="h-9 shrink-0 rounded-full border border-amber-200 bg-amber-100 px-4 text-sm font-medium text-amber-800">＋ Poop</button>
     {{end}}
@@ -142,13 +138,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
     </div>
     {{end}}
     {{else}}
-    <p class="border-t border-stone-100 px-[18px] pb-1 pt-3 text-sm text-stone-500">Nothing logged yet today.</p>
-    {{end}}
-    {{if .IsToday}}
-    <div class="flex border-t border-stone-100 px-[18px] pb-3.5 pt-2.5">
-      <button hx-post="/simple/poops" hx-vals='{"kind":"accident"}' hx-target="#card-poop" hx-swap="outerHTML"
-              class="h-[34px] rounded-full border border-rose-200 px-3.5 text-[13px] text-rose-800">＋ Log accident</button>
-    </div>
+    <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">Nothing logged yet today.</p>
     {{end}}
   </div>
 </section>
@@ -213,7 +203,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Home alone
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
       <span class="max-w-full truncate text-[15px] leading-5{{if .Running}} text-sky-700{{end}}">
-        {{if .Running}}Alone since {{clock .Running.Started}}{{else}}{{if .TodayMin}}Today {{dur .TodayMin}}{{else}}Not today{{end}}{{if .Records.Calm.Set}} · calm record {{dur .Records.Calm.Mins}}{{end}}{{end}}
+        {{if .Running}}Alone since {{clock .Running.Started}}{{else if .TodayMin}}{{dur .TodayMin}} alone today{{else}}None yet today{{end}}
       </span>
     </button>
     {{if and .IsToday (not .Running)}}
@@ -239,15 +229,12 @@ document.addEventListener('htmx:oobAfterSwap', e => {
     </div>
     {{end}}
   </div>
-  <button type="button" data-toggle-proxy aria-label="Show details"
-          class="flex w-full items-center gap-2.5 px-[18px] pt-3 text-left group-data-[open=true]/card:hidden">
-    <span class="flex min-w-0 flex-1 flex-wrap gap-1">{{template "alone-chips" .Running}}</span>
-    <span class="shrink-0 text-[13px] text-sky-700">Details</span>
-  </button>
-  <div class="hidden group-data-[open=true]/card:block">{{template "alone-controls" (dict "S" .Running "Editing" false)}}</div>
-  <div class="px-[18px] pb-[18px] pt-3.5">
+  <div class="px-[18px] pt-3.5">{{template "alone-controls" (dict "S" .Running "Editing" false)}}</div>
+  <div class="flex flex-col items-center px-[18px] pb-[18px] pt-3.5">
     <button hx-post="/simple/alone/stop" hx-target="#card-alone" hx-swap="outerHTML"
             class="h-11 w-full rounded-full bg-sky-700 text-[15px] font-medium text-white">Not alone anymore</button>
+    <button hx-post="/simple/alone/discard" hx-target="#card-alone" hx-swap="outerHTML"
+            class="mt-0.5 h-9 px-3 text-[13px] text-stone-600">Discard timer</button>
   </div>
 
   {{else}}
@@ -416,7 +403,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       {{range .Places}}
       <label class="group cursor-pointer">
         <input type="checkbox" name="where" value="{{.}}" class="peer sr-only"{{if index $.Where .}} checked{{end}}>
-        <span class="inline-flex h-[34px] items-center rounded-full border border-stone-200 bg-white px-[13px] text-[13px] text-stone-700 peer-checked:border-indigo-200 peer-checked:bg-indigo-100 peer-checked:font-medium peer-checked:text-indigo-800"><span class="hidden group-has-[:checked]:inline">✓&nbsp;</span>{{.}}</span>
+        <span class="inline-flex h-[34px] items-center rounded-full border border-stone-200 bg-white px-[13px] text-[13px] text-stone-700 peer-checked:border-indigo-200 peer-checked:bg-indigo-100 peer-checked:font-medium peer-checked:text-indigo-800">{{.}}</span>
       </label>
       {{end}}
     </div>
@@ -427,7 +414,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       {{range .Whats}}
       <label class="group cursor-pointer">
         <input type="checkbox" name="what" value="{{.}}" class="peer sr-only"{{if index $.What .}} checked{{end}}>
-        <span class="inline-flex h-[34px] items-center rounded-full border border-stone-200 bg-white px-[13px] text-[13px] text-stone-700 peer-checked:border-indigo-200 peer-checked:bg-indigo-100 peer-checked:font-medium peer-checked:text-indigo-800"><span class="hidden group-has-[:checked]:inline">✓&nbsp;</span>{{.}}</span>
+        <span class="inline-flex h-[34px] items-center rounded-full border border-stone-200 bg-white px-[13px] text-[13px] text-stone-700 peer-checked:border-indigo-200 peer-checked:bg-indigo-100 peer-checked:font-medium peer-checked:text-indigo-800">{{.}}</span>
       </label>
       {{end}}
     </div>
