@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"math"
+	"strings"
 	"time"
 
 	"puppy/routine"
@@ -46,6 +47,88 @@ func parseTemplates() (*template.Template, error) {
 				return 0
 			}
 			return int(time.Since(*t).Minutes())
+		},
+		// Simplified-app formatters.
+		"dur": func(mins int) string { // "40m", "1h 27m", "2h"
+			if mins < 60 {
+				return fmt.Sprintf("%dm", mins)
+			}
+			if mins%60 == 0 {
+				return fmt.Sprintf("%dh", mins/60)
+			}
+			return fmt.Sprintf("%dh %dm", mins/60, mins%60)
+		},
+		"clock":     func(t time.Time) string { return t.Format("15:04") },
+		"dateShort": func(t time.Time) string { return t.Format("Mon 02/01") },
+		"isoUTC":    func(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05Z") },
+		"ago": func(t time.Time) string {
+			d := time.Since(t)
+			switch {
+			case d < time.Minute:
+				return "just now"
+			case d < time.Hour:
+				return fmt.Sprintf("%d min ago", int(d.Minutes()))
+			default:
+				return fmt.Sprintf("%d h ago", int(d.Hours()))
+			}
+		},
+		"joinDot": func(s []string) string { return strings.Join(s, " · ") },
+		"whereLabel": func(v string) string {
+			switch v {
+			case "cage":
+				return "Cage"
+			case "pen":
+				return "Pen"
+			case "roaming":
+				return "Roaming"
+			}
+			return v
+		},
+		"sleepLabel": func(v string) string {
+			switch v {
+			case "well":
+				return "Slept well"
+			case "some":
+				return "Some"
+			case "none":
+				return "Didn't sleep"
+			}
+			return v
+		},
+		"behaviourLabel": func(v string) string {
+			switch v {
+			case "calm":
+				return "Calm"
+			case "unsettled":
+				return "Unsettled"
+			case "stressed":
+				return "Stressed"
+			}
+			return v
+		},
+		// moodChip: small chip colours for a sleep/behaviour value.
+		"moodChip": func(v string) string {
+			switch v {
+			case "well", "calm":
+				return "bg-emerald-100 text-emerald-800"
+			case "some", "unsettled":
+				return "bg-amber-100 text-amber-800"
+			case "none", "stressed":
+				return "bg-rose-100 text-rose-800"
+			}
+			return "bg-stone-100 text-stone-700"
+		},
+		// pillOn: selected-state classes for an alone-controls pill, by colour.
+		"pillOn": func(color string) string {
+			switch color {
+			case "emerald":
+				return "border-emerald-200 bg-emerald-100 font-medium text-emerald-800"
+			case "amber":
+				return "border-amber-200 bg-amber-100 font-medium text-amber-800"
+			case "rose":
+				return "border-rose-200 bg-rose-100 font-medium text-rose-800"
+			}
+			return "border-indigo-200 bg-indigo-100 font-medium text-indigo-800"
 		},
 		"fmtMins": func(mins int) string {
 			if mins <= 0 {
