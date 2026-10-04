@@ -52,6 +52,19 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/session/{id}/alone-destroyed", h.handleToggleSessionBool("alone_destroyed"))
 }
 
+// HasClassicData reports whether a given day has any classic (non-alone) session —
+// used by main to decide which version renders a past day.
+func (h *Handler) HasClassicData(date string) (bool, error) {
+	var one int
+	err := h.db.QueryRow(
+		`SELECT 1 FROM sessions WHERE date = ? AND COALESCE(alone,0) = 0 LIMIT 1`, date,
+	).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // Index renders the classic home page. Called by main's mode dispatcher.
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	if err := closeStaleSession(h.db); err != nil {

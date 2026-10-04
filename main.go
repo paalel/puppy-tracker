@@ -19,6 +19,7 @@ import (
 	"puppy/sessions"
 	"puppy/simple"
 	"puppy/stats"
+	"puppy/store"
 )
 
 //go:embed migrations
@@ -128,11 +129,27 @@ func main() {
 	config.New(db, tmpl).RegisterRoutes(mux)
 	camera.New(db, tmpl).RegisterRoutes(mux)
 
-	// The home page renders the classic or simplified version per the configured
-	// mode — checked per request so the Settings toggle takes effect immediately,
-	// for any date.
+	// Home-page dispatch: today renders the configured mode (so the Settings
+	// toggle takes effect immediately); a past day is data-driven — classic if it
+	// has classic sessions, else simplified if it has simplified data — so each
+	// day shows the version it was recorded with.
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		if cfg, err := config.Get(db); err == nil && cfg.Mode == config.ModeSimplified {
+		simplifiedMode := false
+		if cfg, err := config.Get(db); err == nil {
+			simplifiedMode = cfg.Mode == config.ModeSimplified
+		}
+		date := r.URL.Query().Get("date")
+		if date != "" && date < store.RolloverDate() { // a past day
+			if has, _ := classic.HasClassicData(date); has {
+				classic.Index(w, r)
+				return
+			}
+			if has, _ := simplified.HasData(date); has {
+				simplified.Index(w, r)
+				return
+			}
+		}
+		if simplifiedMode {
 			simplified.Index(w, r)
 			return
 		}

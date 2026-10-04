@@ -323,6 +323,7 @@
                 <span class="text-sm font-semibold text-stone-700">{{dayLabel .Date}}</span>
                 <span class="text-xs text-stone-400 font-mono">{{fmtDate .Date}}</span>
             </div>
+            {{if .HasClassic}}
             <div class="grid grid-cols-4 gap-2">
                 <div>
                     <p class="text-xs text-stone-400 mb-0.5">Cycles</p>
@@ -368,9 +369,18 @@
                 {{if .AccidentCount}}<span class="text-xs text-rose-700 font-medium ml-auto">{{.AccidentCount}}× accident</span>{{end}}
             </div>
             {{end}}
+            {{end}}
+            {{if or .SimplePoops .SimpleAccidents .SimpleNaps .SimpleOutings}}
+            <div class="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500 {{if .HasClassic}}mt-2 pt-2 border-t border-stone-100{{end}}">
+                {{if .SimplePoops}}<span>{{.SimplePoops}} poop{{if gt .SimplePoops 1}}s{{end}}</span>{{end}}
+                {{if .SimpleAccidents}}<span class="text-rose-600">{{.SimpleAccidents}} accident{{if gt .SimpleAccidents 1}}s{{end}}</span>{{end}}
+                {{if .SimpleNaps}}<span>{{.SimpleNaps}} nap{{if gt .SimpleNaps 1}}s{{end}}{{if .SimpleNapMins}} · {{fmtMins .SimpleNapMins}}{{end}}</span>{{end}}
+                {{if .SimpleOutings}}<span>{{.SimpleOutings}} outing{{if gt .SimpleOutings 1}}s{{end}}</span>{{end}}
+            </div>
+            {{end}}
             {{if .AloneCount}}
-            <div class="flex items-center gap-2 mt-2 pt-2 border-t border-stone-100">
-                <span class="text-xs {{if .AloneConcern}}text-rose-600{{else}}text-sky-600{{end}} font-medium">🏠 {{fmtMins .AloneMins}} home alone{{if gt .AloneCount 1}} · {{.AloneCount}}×{{end}}</span>
+            <div class="flex items-center gap-2 mt-2 {{if or .HasClassic .SimplePoops .SimpleAccidents .SimpleNaps .SimpleOutings}}pt-2 border-t border-stone-100{{end}}">
+                <span class="text-xs {{if .AloneConcern}}text-rose-600{{else}}text-sky-600{{end}} font-medium">{{fmtMins .AloneMins}} home alone{{if gt .AloneCount 1}} · {{.AloneCount}}×{{end}}</span>
                 {{if .AloneConcern}}<span class="text-xs text-rose-400">needs work</span>{{end}}
             </div>
             {{end}}

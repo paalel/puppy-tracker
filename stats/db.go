@@ -13,6 +13,14 @@ import (
 func parseTimestamp(s string) (time.Time, error) { return store.ParseTimestamp(s) }
 
 func getDayStats(db *sql.DB) ([]DayStat, error) {
+	byDate := map[string]*DayStat{}
+	get := func(date string) *DayStat {
+		if byDate[date] == nil {
+			byDate[date] = &DayStat{Date: date}
+		}
+		return byDate[date]
+	}
+
 	rows, err := db.Query(`
 		SELECT
 			date,
@@ -28,8 +36,6 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 		FROM sessions
 		WHERE slept_at IS NOT NULL AND excluded = 0 AND alone = 0
 		GROUP BY date
-		ORDER BY date DESC
-		LIMIT 30
 	`)
 	if err != nil {
 		return nil, err
@@ -38,7 +44,6 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 
 	today := store.RolloverDate()
 
-	var days []DayStat
 	for rows.Next() {
 		var d DayStat
 		var avgSecs int
@@ -49,6 +54,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			return nil, err
 		}
 		d.AvgAwakeMins = avgSecs / 60
+		d.HasClassic = true
 		if t, err := parseTimestamp(firstWake); err == nil {
 			tl := t.Local()
 			d.FirstWake = &tl
@@ -57,7 +63,7 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 			tl := t.Local()
 			d.LastSleep = &tl
 		}
-		days = append(days, d)
+		byDate[d.Date] = &d
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -78,8 +84,10 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range days {
-		days[i].AvgNapMins = napMins[days[i].Date]
+	for date, v := range napMins {
+		if d := byDate[date]; d != nil {
+			d.AvgNapMins = v
+		}
 	}
 
 	settleMins, err := queryDateMins(db, `
@@ -93,8 +101,10 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range days {
-		days[i].AvgSettleMins = settleMins[days[i].Date]
+	for date, v := range settleMins {
+		if d := byDate[date]; d != nil {
+			d.AvgSettleMins = v
+		}
 	}
 
 	totalSleepMins, err := queryDateMins(db, `
@@ -123,8 +133,36 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range days {
-		days[i].TotalSleepMins = totalSleepMins[days[i].Date]
+	for date, v := range totalSleepMins {
+		if d := byDate[date]; d != nil {
+			d.TotalSleepMins = v
+		}
+	}
+
+	// Merge simplified per-day summaries, creating entries for purely-simplified days.
+	simpleByDay, err := getSimpleByDay(db)
+	if err != nil {
+		return nil, err
+	}
+	for date, s := range simpleByDay {
+		d := get(date)
+		d.SimplePoops = s.poops
+		d.SimpleAccidents = s.accidents
+		d.SimpleNaps = s.naps
+		d.SimpleNapMins = s.napMins
+		d.SimpleOutings = s.outings
+	}
+
+	// Merge home-alone time per day (shared sessions alone rows).
+	aloneByDay, err := getAloneByDay(db)
+	if err != nil {
+		return nil, err
+	}
+	for date, a := range aloneByDay {
+		d := get(date)
+		d.AloneMins = a.AloneMins
+		d.AloneCount = a.AloneCount
+		d.AloneConcern = a.AloneConcern
 	}
 
 	// For today, only show LastSleep once all routine sessions are completed.
@@ -132,28 +170,93 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 	_ = db.QueryRow(`SELECT COUNT(*) FROM routine_sessions`).Scan(&routineCount)
 	_ = db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE date = ? AND slept_at IS NOT NULL`, today).Scan(&completedToday)
 	if completedToday < routineCount {
-		for i := range days {
-			if days[i].Date == today {
-				days[i].LastSleep = nil
-				break
-			}
+		if d := byDate[today]; d != nil {
+			d.LastSleep = nil
 		}
 	}
 
-	// Merge in home-alone time per day for the History cards.
-	aloneByDay, err := getAloneByDay(db)
+	// Newest first, capped at 30 days.
+	dates := make([]string, 0, len(byDate))
+	for date := range byDate {
+		dates = append(dates, date)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
+	if len(dates) > 30 {
+		dates = dates[:30]
+	}
+	days := make([]DayStat, 0, len(dates))
+	for _, date := range dates {
+		days = append(days, *byDate[date])
+	}
+	return days, nil
+}
+
+type simpleDaySummary struct {
+	poops, accidents, naps, napMins, outings int
+}
+
+// getSimpleByDay aggregates simplified poops/naps/outings per day for the History.
+func getSimpleByDay(db *sql.DB) (map[string]*simpleDaySummary, error) {
+	m := map[string]*simpleDaySummary{}
+	get := func(day string) *simpleDaySummary {
+		if m[day] == nil {
+			m[day] = &simpleDaySummary{}
+		}
+		return m[day]
+	}
+
+	pr, err := db.Query(`SELECT day,
+		SUM(CASE WHEN kind='poop' THEN 1 ELSE 0 END),
+		SUM(CASE WHEN kind='accident' THEN 1 ELSE 0 END)
+		FROM poops WHERE deleted_at IS NULL GROUP BY day`)
 	if err != nil {
 		return nil, err
 	}
-	for i := range days {
-		if a := aloneByDay[days[i].Date]; a != nil {
-			days[i].AloneMins = a.AloneMins
-			days[i].AloneCount = a.AloneCount
-			days[i].AloneConcern = a.AloneConcern
+	for pr.Next() {
+		var day string
+		var poops, accidents int
+		if err := pr.Scan(&day, &poops, &accidents); err != nil {
+			pr.Close()
+			return nil, err
 		}
+		s := get(day)
+		s.poops, s.accidents = poops, accidents
 	}
+	pr.Close()
 
-	return days, nil
+	nr, err := db.Query(`SELECT day, COUNT(*),
+		CAST(SUM(strftime('%s', ended_at) - strftime('%s', started_at)) / 60 AS INTEGER)
+		FROM naps WHERE ended_at IS NOT NULL AND deleted_at IS NULL GROUP BY day`)
+	if err != nil {
+		return nil, err
+	}
+	for nr.Next() {
+		var day string
+		var naps, mins int
+		if err := nr.Scan(&day, &naps, &mins); err != nil {
+			nr.Close()
+			return nil, err
+		}
+		s := get(day)
+		s.naps, s.napMins = naps, mins
+	}
+	nr.Close()
+
+	or, err := db.Query(`SELECT day, COUNT(*) FROM outings WHERE deleted_at IS NULL GROUP BY day`)
+	if err != nil {
+		return nil, err
+	}
+	for or.Next() {
+		var day string
+		var n int
+		if err := or.Scan(&day, &n); err != nil {
+			or.Close()
+			return nil, err
+		}
+		get(day).outings = n
+	}
+	or.Close()
+	return m, nil
 }
 
 type AccidentStats struct {

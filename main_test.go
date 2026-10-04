@@ -13,6 +13,7 @@ import (
 	"puppy/sessions"
 	"puppy/simple"
 	"puppy/stats"
+	"puppy/store"
 )
 
 func newTestApp(t *testing.T) http.Handler {
@@ -41,7 +42,22 @@ func newTestApp(t *testing.T) http.Handler {
 	stats.New(db, tmpl).RegisterRoutes(mux)
 	config.New(db, tmpl).RegisterRoutes(mux)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		if cfg, err := config.Get(db); err == nil && cfg.Mode == config.ModeSimplified {
+		simplifiedMode := false
+		if cfg, err := config.Get(db); err == nil {
+			simplifiedMode = cfg.Mode == config.ModeSimplified
+		}
+		date := r.URL.Query().Get("date")
+		if date != "" && date < store.RolloverDate() {
+			if has, _ := classic.HasClassicData(date); has {
+				classic.Index(w, r)
+				return
+			}
+			if has, _ := simplified.HasData(date); has {
+				simplified.Index(w, r)
+				return
+			}
+		}
+		if simplifiedMode {
 			simplified.Index(w, r)
 			return
 		}

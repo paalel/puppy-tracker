@@ -19,6 +19,20 @@ type DayStat struct {
 	AloneMins      int  // total home-alone time that day
 	AloneCount     int  // number of home-alone sessions
 	AloneConcern   bool // any session stressed or destructive
+	// Classic metrics (above) only apply when the day was tracked with the
+	// classic nap flow. Simplified days carry the fields below instead.
+	HasClassic      bool
+	SimplePoops     int
+	SimpleAccidents int
+	SimpleNaps      int
+	SimpleNapMins   int
+	SimpleOutings   int
+}
+
+// HasSimple reports whether the day has any simplified data worth summarising.
+func (d DayStat) HasSimple() bool {
+	return d.SimplePoops > 0 || d.SimpleAccidents > 0 || d.SimpleNaps > 0 ||
+		d.SimpleOutings > 0 || d.AloneCount > 0
 }
 
 // AloneStats summarises home-alone training: the two records plus quality

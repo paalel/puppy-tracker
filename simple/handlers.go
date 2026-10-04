@@ -50,6 +50,20 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /simple/undo/{token}", h.handleUndo)
 }
 
+// HasData reports whether a day has any simplified data (poops, naps, outings,
+// or home-alone sessions) — used by main to decide which version renders a past day.
+func (h *Handler) HasData(date string) (bool, error) {
+	var n int
+	err := h.db.QueryRow(`SELECT
+		(SELECT COUNT(*) FROM poops   WHERE day  = ? AND deleted_at IS NULL) +
+		(SELECT COUNT(*) FROM naps    WHERE day  = ? AND deleted_at IS NULL) +
+		(SELECT COUNT(*) FROM outings WHERE day  = ? AND deleted_at IS NULL) +
+		(SELECT COUNT(*) FROM sessions WHERE date = ? AND alone = 1 AND deleted_at IS NULL)`,
+		date, date, date, date,
+	).Scan(&n)
+	return n > 0, err
+}
+
 // Index renders the simplified Today screen for the requested date (defaulting
 // to today, and never past today), with day-at-a-time navigation.
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
