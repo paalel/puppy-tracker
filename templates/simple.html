@@ -117,6 +117,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       <span class="max-w-full truncate text-[15px] leading-5">
         {{if and (eq .Count 0) (eq .Accidents 0)}}None yet today{{else}}{{.Count}} today · last {{clock .Last}}{{if .Accidents}}<span class="text-rose-800"> · {{.Accidents}} accident{{if gt .Accidents 1}}s{{end}}</span>{{end}}{{end}}
       </span>
+      {{if .HasChance}}<span class="text-[13px] leading-4 text-amber-700">{{.ChancePct}}% poop chance now</span>{{end}}
     </button>
     {{if .IsToday}}
     <button hx-post="/simple/poops" hx-vals='{"kind":"accident"}' hx-target="#card-poop" hx-swap="outerHTML"

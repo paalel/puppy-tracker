@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"puppy/config"
+	"puppy/sessions"
 	"puppy/store"
 )
 
@@ -34,6 +35,8 @@ type poopVM struct {
 	Accidents int        // accident entries
 	Last      *time.Time // latest entry time, any kind
 	IsToday   bool
+	ChancePct int  // current P(poop) %
+	HasChance bool // enough history to predict
 }
 
 type sleepVM struct {
@@ -140,6 +143,9 @@ func (h *Handler) buildPoop(date string) (*poopVM, error) {
 		}
 		t := poops[i].At
 		vm.Last = &t
+	}
+	if vm.IsToday {
+		vm.ChancePct, vm.HasChance = sessions.PoopChance(h.db)
 	}
 	return vm, nil
 }

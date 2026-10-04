@@ -553,15 +553,20 @@ func loadTrainingData(db *sql.DB) ([]trainRow, error) {
 	return data, nil
 }
 
-// getHoursSinceLastPoop returns hours elapsed since the last poop session's woke_at.
-// Returns -1 if no poop has ever been recorded.
+// getHoursSinceLastPoop returns hours since the most recent poop, from BOTH the
+// classic sessions and the simplified poops table, so the prediction reflects
+// current reality whichever version logged it. Returns -1 if none recorded.
 func getHoursSinceLastPoop(db *sql.DB) (float64, error) {
 	var hours sql.NullFloat64
 	err := db.QueryRow(`
-		SELECT (CAST(strftime('%s', 'now') AS REAL) -
-		        CAST(strftime('%s', MAX(woke_at)) AS REAL)) / 3600.0
-		FROM sessions
-		WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0
+		SELECT (CAST(strftime('%s', 'now') AS REAL) - CAST(strftime('%s', (
+			SELECT MAX(t) FROM (
+				SELECT MAX(woke_at) AS t FROM sessions
+				WHERE toilet_poop = 1 AND woke_at IS NOT NULL AND COALESCE(excluded, 0) = 0
+				UNION ALL
+				SELECT MAX(at) AS t FROM poops WHERE kind = 'poop' AND deleted_at IS NULL
+			)
+		)) AS REAL)) / 3600.0
 	`).Scan(&hours)
 	if err != nil {
 		return -1, err
@@ -570,4 +575,25 @@ func getHoursSinceLastPoop(db *sql.DB) (float64, error) {
 		return -1, nil
 	}
 	return hours.Float64, nil
+}
+
+// PoopChance returns the current P(poop) as a whole percentage for the simplified
+// card. The model is trained on classic history (the physiology still holds); the
+// live input — hours since the last poop — includes simplified poops. ok is false
+// when there isn't enough history to predict.
+func PoopChance(db *sql.DB) (pct int, ok bool) {
+	hsp, err := getHoursSinceLastPoop(db)
+	if err != nil || hsp < 0 {
+		return 0, false
+	}
+	data, err := loadTrainingData(db)
+	if err != nil || len(data) < numFeatures+1 {
+		return 0, false
+	}
+	beta, cov, err := fitLogistic(data)
+	if err != nil {
+		return 0, false
+	}
+	mid, _, _ := (&PoopPredictor{beta: beta, covBeta: cov}).Predict(time.Now().Local().Hour(), hsp)
+	return int(mid*100 + 0.5), true
 }
