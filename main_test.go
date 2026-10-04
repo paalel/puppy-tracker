@@ -11,6 +11,7 @@ import (
 	"puppy/config"
 	"puppy/routine"
 	"puppy/sessions"
+	"puppy/simple"
 	"puppy/stats"
 )
 
@@ -32,10 +33,20 @@ func newTestApp(t *testing.T) http.Handler {
 	}
 
 	mux := http.NewServeMux()
-	sessions.New(db, tmpl).RegisterRoutes(mux)
+	classic := sessions.New(db, tmpl)
+	classic.RegisterRoutes(mux)
+	simplified := simple.New(db, tmpl)
+	simplified.RegisterRoutes(mux)
 	routine.New(db, tmpl).RegisterRoutes(mux)
 	stats.New(db, tmpl).RegisterRoutes(mux)
 	config.New(db, tmpl).RegisterRoutes(mux)
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		if cfg, err := config.Get(db); err == nil && cfg.Mode == config.ModeSimplified {
+			simplified.Index(w, r)
+			return
+		}
+		classic.Index(w, r)
+	})
 	return mux
 }
 

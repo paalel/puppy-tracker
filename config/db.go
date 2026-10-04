@@ -13,13 +13,17 @@ func Get(db *sql.DB) (*Config, error) {
 	}
 	defer rows.Close()
 
-	c := &Config{PuppyName: "Nova", AwakeMinutes: 40, NapMinutes: 90, WindDownMinutes: 25, FirstWakeTime: "09:00"}
+	c := &Config{PuppyName: "Nova", AwakeMinutes: 40, NapMinutes: 90, WindDownMinutes: 25, FirstWakeTime: "09:00", Mode: ModeClassic}
 	for rows.Next() {
 		var k, v string
 		if err := rows.Scan(&k, &v); err != nil {
 			return nil, err
 		}
 		switch k {
+		case "app_mode":
+			if v == string(ModeSimplified) {
+				c.Mode = ModeSimplified
+			}
 		case "puppy_name":
 			if v != "" {
 				c.PuppyName = v
@@ -54,6 +58,10 @@ func Save(db *sql.DB, c *Config) error {
 	if c.Birthdate != nil {
 		birthdateStr = c.Birthdate.Format("2006-01-02")
 	}
+	mode := c.Mode
+	if mode != ModeSimplified {
+		mode = ModeClassic
+	}
 	pairs := [][2]string{
 		{"puppy_name", c.PuppyName},
 		{"puppy_birthdate", birthdateStr},
@@ -61,6 +69,7 @@ func Save(db *sql.DB, c *Config) error {
 		{"nap_minutes", strconv.Itoa(c.NapMinutes)},
 		{"wind_down_minutes", strconv.Itoa(c.WindDownMinutes)},
 		{"first_wake_time", c.FirstWakeTime},
+		{"app_mode", string(mode)},
 	}
 	for _, kv := range pairs {
 		_, err := db.Exec(
@@ -74,4 +83,3 @@ func Save(db *sql.DB, c *Config) error {
 	}
 	return nil
 }
-

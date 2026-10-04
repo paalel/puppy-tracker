@@ -17,6 +17,7 @@ import (
 	"puppy/config"
 	"puppy/routine"
 	"puppy/sessions"
+	"puppy/simple"
 	"puppy/stats"
 )
 
@@ -117,11 +118,26 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
-	sessions.New(db, tmpl).RegisterRoutes(mux)
+
+	classic := sessions.New(db, tmpl)
+	classic.RegisterRoutes(mux)
+	simplified := simple.New(db, tmpl)
+	simplified.RegisterRoutes(mux)
 	routine.New(db, tmpl).RegisterRoutes(mux)
 	stats.New(db, tmpl).RegisterRoutes(mux)
 	config.New(db, tmpl).RegisterRoutes(mux)
 	camera.New(db, tmpl).RegisterRoutes(mux)
+
+	// The home page renders the classic or simplified version per the configured
+	// mode — checked per request so the Settings toggle takes effect immediately,
+	// for any date.
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		if cfg, err := config.Get(db); err == nil && cfg.Mode == config.ModeSimplified {
+			simplified.Index(w, r)
+			return
+		}
+		classic.Index(w, r)
+	})
 
 	log.Println("Puppy Routine Tracker listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))

@@ -24,7 +24,7 @@ func New(db *sql.DB, tmpl *template.Template) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /{$}", h.handleIndex)
+	// GET /{$} (the home page) is dispatched by main based on app mode; see Index.
 	mux.HandleFunc("GET /api/state", h.handleGetState)
 	mux.HandleFunc("POST /api/phase", h.handlePostPhase)
 	mux.HandleFunc("POST /api/phase/undo", h.handleUndoPhase)
@@ -52,7 +52,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/session/{id}/alone-destroyed", h.handleToggleSessionBool("alone_destroyed"))
 }
 
-func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
+// Index renders the classic home page. Called by main's mode dispatcher.
+func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	if err := closeStaleSession(h.db); err != nil {
 		log.Printf("closeStaleSession: %v", err)
 	}

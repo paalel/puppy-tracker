@@ -25,6 +25,32 @@ func New(db *sql.DB, tmpl *template.Template) *Handler {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings", h.handleGetSettings)
 	mux.HandleFunc("POST /settings", h.handlePostSettings)
+	mux.HandleFunc("POST /settings/mode", h.handleSetMode)
+}
+
+// handleSetMode switches the app between classic and simplified, preserving all
+// other settings. It redirects home so the newly-selected version renders.
+func (h *Handler) handleSetMode(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	cfg, err := Get(h.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if r.FormValue("mode") == string(ModeSimplified) {
+		cfg.Mode = ModeSimplified
+	} else {
+		cfg.Mode = ModeClassic
+	}
+	if err := Save(h.db, cfg); err != nil {
+		log.Printf("setMode: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
 type SettingsData struct {
@@ -95,7 +121,7 @@ func (h *Handler) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 		birthdate = current.Birthdate
 	}
 
-	cfg := &Config{PuppyName: name, Birthdate: birthdate, AwakeMinutes: awakeMins, NapMinutes: napMins, WindDownMinutes: windDownMins, FirstWakeTime: firstWakeTime}
+	cfg := &Config{PuppyName: name, Birthdate: birthdate, AwakeMinutes: awakeMins, NapMinutes: napMins, WindDownMinutes: windDownMins, FirstWakeTime: firstWakeTime, Mode: current.Mode}
 	if err := Save(h.db, cfg); err != nil {
 		log.Printf("saveConfig: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
