@@ -76,13 +76,6 @@ func (h *Handler) renderCard(buf *bytes.Buffer, name string, editID int, oob boo
 		}
 		vm.OOB = oob
 		return h.tmpl.ExecuteTemplate(buf, "card-alone", vm)
-	case "outings":
-		vm, err := h.buildOutings(date)
-		if err != nil {
-			return err
-		}
-		vm.OOB = oob
-		return h.tmpl.ExecuteTemplate(buf, "card-outings", vm)
 	}
 	return fmt.Errorf("unknown card %q", name)
 }
@@ -187,6 +180,29 @@ func (h *Handler) handleNapDelete(w http.ResponseWriter, r *http.Request) {
 		Token:  "undel-nap:" + strconv.Itoa(id),
 		Target: "#card-sleep",
 	})
+}
+
+// handleNapAdjust shifts a nap's start (col=start) or end (col=end) by delta
+// minutes — the ±5 controls on the running timer and on logged naps.
+func (h *Handler) handleNapAdjust(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	column := "started_at"
+	if r.FormValue("col") == "end" {
+		column = "ended_at"
+	}
+	delta, err := strconv.Atoi(r.FormValue("delta"))
+	if err != nil || delta < -120 || delta > 120 {
+		http.Error(w, "invalid delta", http.StatusBadRequest)
+		return
+	}
+	if err := adjustNapTime(h.db, pathID(r), column, delta); err != nil {
+		h.fail(w, "adjust nap", err)
+		return
+	}
+	h.respond(w, "sleep", nil)
 }
 
 // ── Home alone ──────────────────────────────────────────────────────────────
@@ -296,80 +312,6 @@ func (h *Handler) handleAloneCard(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-// ── Outings ─────────────────────────────────────────────────────────────────
-
-func (h *Handler) handleOutingNew(w http.ResponseWriter, r *http.Request) {
-	h.writeForm(w, newOutingForm(0, time.Now(), nil, nil, false))
-}
-
-func (h *Handler) handleOutingEdit(w http.ResponseWriter, r *http.Request) {
-	o, err := outingByID(h.db, pathID(r))
-	if err != nil || o == nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	h.writeForm(w, newOutingForm(o.ID, o.At, o.Where, o.What, true))
-}
-
-func (h *Handler) writeForm(w http.ResponseWriter, vm *outingFormVM) {
-	var buf bytes.Buffer
-	if err := h.tmpl.ExecuteTemplate(&buf, "outing-form", vm); err != nil {
-		h.fail(w, "outing form", err)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Write(buf.Bytes())
-}
-
-func (h *Handler) handleOutingCreate(w http.ResponseWriter, r *http.Request) {
-	where, what := outingForm(r)
-	if len(where)+len(what) == 0 {
-		http.Error(w, "pick at least one", http.StatusBadRequest)
-		return
-	}
-	if _, err := createOuting(h.db, where, what); err != nil {
-		h.fail(w, "create outing", err)
-		return
-	}
-	h.respond(w, "outings", nil)
-}
-
-func (h *Handler) handleOutingUpdate(w http.ResponseWriter, r *http.Request) {
-	where, what := outingForm(r)
-	if len(where)+len(what) == 0 {
-		http.Error(w, "pick at least one", http.StatusBadRequest)
-		return
-	}
-	if err := updateOuting(h.db, pathID(r), where, what); err != nil {
-		h.fail(w, "update outing", err)
-		return
-	}
-	h.respond(w, "outings", nil)
-}
-
-func (h *Handler) handleOutingDelete(w http.ResponseWriter, r *http.Request) {
-	id := pathID(r)
-	o, _ := outingByID(h.db, id)
-	when := ""
-	if o != nil {
-		when = " " + clockStr(o.At)
-	}
-	if err := softDelete(h.db, "outings", id); err != nil {
-		h.fail(w, "delete outing", err)
-		return
-	}
-	h.respond(w, "outings", &toastVM{
-		Msg:    "Outing" + when + " removed",
-		Token:  "undel-outing:" + strconv.Itoa(id),
-		Target: "#card-outings",
-	})
-}
-
-func (h *Handler) handleOutingsCard(w http.ResponseWriter, r *http.Request) {
-	h.respond(w, "outings", nil)
-}
-
 // ── Undo ────────────────────────────────────────────────────────────────────
 
 func (h *Handler) handleUndo(w http.ResponseWriter, r *http.Request) {
@@ -389,8 +331,6 @@ func (h *Handler) handleUndo(w http.ResponseWriter, r *http.Request) {
 		err, card = resumeAlone(h.db, id), "alone"
 	case "undel-alone":
 		err, card = restoreAlone(h.db, id), "alone"
-	case "undel-outing":
-		err, card = restore(h.db, "outings", id), "outings"
 	default:
 		http.Error(w, "bad token", http.StatusBadRequest)
 		return
@@ -418,27 +358,6 @@ func parseToken(token string) (string, int) {
 	return parts[0], id
 }
 
-// outingForm reads the multi-select where/what checkboxes, keeping only known
-// tags (rejecting anything not in the fixed lists).
-func outingForm(r *http.Request) (where, what []string) {
-	_ = r.ParseForm()
-	return filterTags(r.Form["where"], placeTags), filterTags(r.Form["what"], whatTags)
-}
-
-func filterTags(got, allowed []string) []string {
-	set := map[string]bool{}
-	for _, a := range allowed {
-		set[a] = true
-	}
-	var out []string
-	for _, g := range got {
-		if set[g] {
-			out = append(out, g)
-		}
-	}
-	return out
-}
-
 func durStr(m int) string {
 	if m <= 0 {
 		return "<1m"
@@ -452,5 +371,4 @@ func durStr(m int) string {
 	return fmt.Sprintf("%dh %dm", m/60, m%60)
 }
 
-func clockStr(t time.Time) string { return t.Format("15:04") }
-func clockNow() string            { return time.Now().Format("15:04") }
+func clockNow() string { return time.Now().Format("15:04") }

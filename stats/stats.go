@@ -26,13 +26,11 @@ type DayStat struct {
 	SimpleAccidents int
 	SimpleNaps      int
 	SimpleNapMins   int
-	SimpleOutings   int
 }
 
 // HasSimple reports whether the day has any simplified data worth summarising.
 func (d DayStat) HasSimple() bool {
-	return d.SimplePoops > 0 || d.SimpleAccidents > 0 || d.SimpleNaps > 0 ||
-		d.SimpleOutings > 0 || d.AloneCount > 0
+	return d.SimplePoops > 0 || d.SimpleAccidents > 0 || d.SimpleNaps > 0 || d.AloneCount > 0
 }
 
 // AloneStats summarises home-alone training: the two records plus quality

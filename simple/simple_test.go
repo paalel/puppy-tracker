@@ -11,7 +11,7 @@ func TestComputeOrders(t *testing.T) {
 
 	// Nothing running → default slots.
 	o := computeOrders(nil, nil)
-	if o["poop"] != 10 || o["sleep"] != 11 || o["alone"] != 12 || o["outings"] != 13 {
+	if o["poop"] != 10 || o["sleep"] != 11 || o["alone"] != 12 {
 		t.Errorf("default orders wrong: %v", o)
 	}
 

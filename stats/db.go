@@ -150,7 +150,6 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 		d.SimpleAccidents = s.accidents
 		d.SimpleNaps = s.naps
 		d.SimpleNapMins = s.napMins
-		d.SimpleOutings = s.outings
 	}
 
 	// Merge home-alone time per day (shared sessions alone rows).
@@ -192,10 +191,10 @@ func getDayStats(db *sql.DB) ([]DayStat, error) {
 }
 
 type simpleDaySummary struct {
-	poops, accidents, naps, napMins, outings int
+	poops, accidents, naps, napMins int
 }
 
-// getSimpleByDay aggregates simplified poops/naps/outings per day for the History.
+// getSimpleByDay aggregates simplified poops/naps per day for the History.
 func getSimpleByDay(db *sql.DB) (map[string]*simpleDaySummary, error) {
 	m := map[string]*simpleDaySummary{}
 	get := func(day string) *simpleDaySummary {
@@ -241,21 +240,6 @@ func getSimpleByDay(db *sql.DB) (map[string]*simpleDaySummary, error) {
 		s.naps, s.napMins = naps, mins
 	}
 	nr.Close()
-
-	or, err := db.Query(`SELECT day, COUNT(*) FROM outings WHERE deleted_at IS NULL GROUP BY day`)
-	if err != nil {
-		return nil, err
-	}
-	for or.Next() {
-		var day string
-		var n int
-		if err := or.Scan(&day, &n); err != nil {
-			or.Close()
-			return nil, err
-		}
-		get(day).outings = n
-	}
-	or.Close()
 	return m, nil
 }
 
@@ -670,15 +654,14 @@ func getToiletAnalytics(db *sql.DB) (*ToiletAnalytics, error) {
 
 // trackedDayWeights returns a recency weight per tracked day and their sum. A day
 // counts only if it has real tracking — a classic (non-alone) session OR any
-// simplified poop/nap/outing entry — so days with no tracking at all are excluded
+// simplified poop/nap entry — so days with no tracking at all are excluded
 // from the poop-probability denominator (they were never marked, just untracked).
 // Weights decay from the most recent tracked day so recent behaviour dominates.
 func trackedDayWeights(db *sql.DB) (map[string]float64, float64, error) {
 	rows, err := db.Query(`
 		SELECT DISTINCT date FROM sessions WHERE COALESCE(excluded,0)=0 AND COALESCE(alone,0)=0
-		UNION SELECT DISTINCT day FROM poops   WHERE deleted_at IS NULL
-		UNION SELECT DISTINCT day FROM naps    WHERE deleted_at IS NULL
-		UNION SELECT DISTINCT day FROM outings WHERE deleted_at IS NULL
+		UNION SELECT DISTINCT day FROM poops WHERE deleted_at IS NULL
+		UNION SELECT DISTINCT day FROM naps  WHERE deleted_at IS NULL
 	`)
 	if err != nil {
 		return nil, 0, err

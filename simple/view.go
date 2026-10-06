@@ -11,10 +11,6 @@ import (
 
 func today() string { return store.RolloverDate() }
 
-// Fixed tag lists for outings — the stored values are these exact strings.
-var placeTags = []string{"Voldsløkka", "Bjølsenparken", "Akerselva", "Home", "Cafe", "Friend's house", "Other"}
-var whatTags = []string{"Pee break", "Long walk", "Training", "Play", "Fetch", "Socialising", "Met dogs"}
-
 type pageVM struct {
 	Config   *config.Config
 	Date     string
@@ -24,7 +20,6 @@ type pageVM struct {
 	Poop     *poopVM
 	Sleep    *sleepVM
 	Alone    *aloneVM
-	Outings  *outingsVM
 }
 
 type poopVM struct {
@@ -64,28 +59,10 @@ type aloneVM struct {
 	TargetLabel string // "Calm record 2h 15m" / "Overall record 3h 40m"
 }
 
-type outingsVM struct {
-	Order   int
-	OOB     bool
-	Outings []Outing
-	Last    *Outing
-	IsToday bool
-}
-
-type outingFormVM struct {
-	ID      int
-	At      time.Time
-	Where   map[string]bool
-	What    map[string]bool
-	Editing bool
-	Places  []string
-	Whats   []string
-}
-
 // computeOrders assigns CSS order values: running sessions float to the top,
 // earliest-started first; everything else keeps its default slot.
 func computeOrders(nap *Nap, alone *AloneSession) map[string]int {
-	orders := map[string]int{"poop": 10, "sleep": 11, "alone": 12, "outings": 13}
+	orders := map[string]int{"poop": 10, "sleep": 11, "alone": 12}
 	type run struct {
 		card  string
 		start time.Time
@@ -121,12 +98,8 @@ func (h *Handler) buildPage(date string) (*pageVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	outings, err := h.buildOutings(date)
-	if err != nil {
-		return nil, err
-	}
 	// Each builder computes its own order (so single-card swaps stay correct).
-	return &pageVM{Config: cfg, Date: date, Poop: poop, Sleep: sleep, Alone: alone, Outings: outings}, nil
+	return &pageVM{Config: cfg, Date: date, Poop: poop, Sleep: sleep, Alone: alone}, nil
 }
 
 func (h *Handler) buildPoop(date string) (*poopVM, error) {
@@ -234,30 +207,6 @@ func progressTarget(a *AloneSession, rec AloneRecords) (int, string) {
 		return rec.Overall.Mins, "Overall record"
 	}
 	return 0, ""
-}
-
-func (h *Handler) buildOutings(date string) (*outingsVM, error) {
-	outings, err := listOutings(h.db, date)
-	if err != nil {
-		return nil, err
-	}
-	vm := &outingsVM{Order: 13, Outings: outings, IsToday: date == today()}
-	if len(outings) > 0 {
-		vm.Last = &outings[len(outings)-1]
-	}
-	return vm, nil
-}
-
-func newOutingForm(id int, at time.Time, where, what []string, editing bool) *outingFormVM {
-	wset := map[string]bool{}
-	for _, w := range where {
-		wset[w] = true
-	}
-	tset := map[string]bool{}
-	for _, t := range what {
-		tset[t] = true
-	}
-	return &outingFormVM{ID: id, At: at, Where: wset, What: tset, Editing: editing, Places: placeTags, Whats: whatTags}
 }
 
 // recordHolder reports whether session id holds the calm and/or overall record.

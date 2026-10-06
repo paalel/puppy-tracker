@@ -2,7 +2,7 @@ package simple
 
 import (
 	"database/sql"
-	"encoding/json"
+	"fmt"
 	"time"
 
 	"puppy/store"
@@ -141,6 +141,40 @@ func resumeNap(db *sql.DB, id int) error {
 	return err
 }
 
+// adjustNapTime shifts a nap's start or end by deltaMinutes, clamped so start
+// stays before end (and neither crosses). column is an internal constant.
+func adjustNapTime(db *sql.DB, id int, column string, deltaMinutes int) error {
+	if column != "started_at" && column != "ended_at" {
+		return fmt.Errorf("invalid nap column %q", column)
+	}
+	var raw sql.NullString
+	if err := db.QueryRow(`SELECT `+column+` FROM naps WHERE id = ?`, id).Scan(&raw); err != nil {
+		return err
+	}
+	if !raw.Valid {
+		return nil // can't adjust an end that isn't set
+	}
+	t, err := store.ParseTimestamp(raw.String)
+	if err != nil {
+		return err
+	}
+	shifted := t.Add(time.Duration(deltaMinutes) * time.Minute)
+
+	// Keep start < end when both exist.
+	n, err := napByID(db, id)
+	if err != nil || n == nil {
+		return err
+	}
+	if column == "started_at" && n.Ended != nil && !shifted.Before(*n.Ended) {
+		return nil
+	}
+	if column == "ended_at" && !shifted.After(n.Started) {
+		return nil
+	}
+	_, err = db.Exec(`UPDATE naps SET `+column+` = ? WHERE id = ?`, store.FormatTimestamp(shifted), id)
+	return err
+}
+
 func listNaps(db *sql.DB, day string) ([]Nap, error) {
 	rows, err := db.Query(
 		`SELECT id, started_at, ended_at FROM naps WHERE day = ? AND deleted_at IS NULL ORDER BY started_at ASC`, day,
@@ -190,87 +224,3 @@ func scanNap(s rowScanner) (*Nap, error) {
 }
 
 func scanNapRows(rows *sql.Rows) (*Nap, error) { return scanNap(rows) }
-
-// ── Outings ─────────────────────────────────────────────────────────────────
-
-type Outing struct {
-	ID    int
-	At    time.Time // local
-	Where []string
-	What  []string
-}
-
-func createOuting(db *sql.DB, where, what []string) (int, error) {
-	res, err := db.Exec(
-		`INSERT INTO outings (day, at, where_json, what_json) VALUES (?, ?, ?, ?)`,
-		store.RolloverDate(), store.NowUTC(), toJSON(where), toJSON(what),
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
-	return int(id), err
-}
-
-func updateOuting(db *sql.DB, id int, where, what []string) error {
-	_, err := db.Exec(
-		`UPDATE outings SET where_json = ?, what_json = ? WHERE id = ?`,
-		toJSON(where), toJSON(what), id,
-	)
-	return err
-}
-
-func listOutings(db *sql.DB, day string) ([]Outing, error) {
-	rows, err := db.Query(
-		`SELECT id, at, where_json, what_json FROM outings WHERE day = ? AND deleted_at IS NULL ORDER BY at ASC`, day,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Outing
-	for rows.Next() {
-		o, err := scanOuting(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *o)
-	}
-	return out, rows.Err()
-}
-
-func outingByID(db *sql.DB, id int) (*Outing, error) {
-	o, err := scanOuting(db.QueryRow(`SELECT id, at, where_json, what_json FROM outings WHERE id = ?`, id))
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return o, err
-}
-
-func scanOuting(s rowScanner) (*Outing, error) {
-	var o Outing
-	var at, whereJSON, whatJSON string
-	if err := s.Scan(&o.ID, &at, &whereJSON, &whatJSON); err != nil {
-		return nil, err
-	}
-	if t, err := store.ParseTimestamp(at); err == nil {
-		o.At = t.Local()
-	}
-	o.Where = fromJSON(whereJSON)
-	o.What = fromJSON(whatJSON)
-	return &o, nil
-}
-
-func toJSON(v []string) string {
-	if v == nil {
-		v = []string{}
-	}
-	b, _ := json.Marshal(v)
-	return string(b)
-}
-
-func fromJSON(s string) []string {
-	var v []string
-	_ = json.Unmarshal([]byte(s), &v)
-	return v
-}

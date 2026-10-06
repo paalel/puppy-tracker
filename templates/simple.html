@@ -38,7 +38,6 @@
     {{template "card-poop" .Poop}}
     {{template "card-sleep" .Sleep}}
     {{template "card-alone" .Alone}}
-    {{template "card-outings" .Outings}}
 
 </main>
 
@@ -167,7 +166,11 @@ document.addEventListener('htmx:oobAfterSwap', e => {
   {{if .Running}}
   <div class="flex flex-col items-center px-[18px] pb-2">
     <div data-timer data-start="{{isoUTC .Running.Started}}" aria-label="Sleep elapsed"
-         class="mb-4 mt-0.5 text-[68px] font-light leading-none tracking-[-0.03em] text-indigo-950 tabular-nums">0:00<span data-timer-sec class="text-[34px] tracking-[-0.01em] text-indigo-400"></span></div>
+         class="mb-2 mt-0.5 text-[68px] font-light leading-none tracking-[-0.03em] text-indigo-950 tabular-nums">0:00<span data-timer-sec class="text-[34px] tracking-[-0.01em] text-indigo-400"></span></div>
+    <div class="mb-3 flex items-center gap-1.5 text-[13px] text-stone-500">
+      <span>Started {{clock .Running.Started}}</span>
+      {{template "nap-adjust" dict "ID" .Running.ID "Col" "start"}}
+    </div>
     <button hx-post="/simple/naps/stop" hx-target="#card-sleep" hx-swap="outerHTML"
             class="h-11 w-full rounded-full bg-indigo-600 text-[15px] font-medium text-white">Wake</button>
     <button hx-post="/simple/naps/discard" hx-target="#card-sleep" hx-swap="outerHTML"
@@ -179,11 +182,19 @@ document.addEventListener('htmx:oobAfterSwap', e => {
     <div class="border-t {{if .Running}}border-indigo-100{{else}}border-stone-100{{end}}">
       {{if .Naps}}
       {{range .Naps}}
-      <div class="flex min-h-[42px] items-center gap-3 pl-[18px] pr-2">
-        <span class="text-[15px] font-medium tabular-nums">{{clock .Started}}</span>
-        <span class="text-[13px] text-stone-400">→</span>
-        <span class="flex-1 text-sm text-indigo-800">{{dur .Minutes}}</span>
-        {{if $.IsToday}}<button hx-delete="/simple/naps/{{.ID}}" hx-target="#card-sleep" hx-swap="outerHTML" aria-label="Remove nap" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>{{end}}
+      <div class="border-t border-stone-100 first:border-t-0 py-2 pl-[18px] pr-2">
+        <div class="flex min-h-[30px] items-center gap-3">
+          <span class="text-[15px] font-medium tabular-nums">{{clock .Started}}</span>
+          <span class="text-[13px] text-stone-400">→</span>
+          <span class="flex-1 text-sm text-indigo-800">{{dur .Minutes}}</span>
+          {{if $.IsToday}}<button hx-delete="/simple/naps/{{.ID}}" hx-target="#card-sleep" hx-swap="outerHTML" aria-label="Remove nap" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>{{end}}
+        </div>
+        {{if $.IsToday}}
+        <div class="mt-1 flex items-center gap-3">
+          <span class="flex items-center gap-1.5 text-xs text-stone-400">start {{template "nap-adjust" dict "ID" .ID "Col" "start"}}</span>
+          <span class="flex items-center gap-1.5 text-xs text-stone-400">end {{template "nap-adjust" dict "ID" .ID "Col" "end"}}</span>
+        </div>
+        {{end}}
       </div>
       {{end}}
       {{else}}
@@ -192,6 +203,16 @@ document.addEventListener('htmx:oobAfterSwap', e => {
     </div>
   </div>
 </section>
+{{end}}
+
+{{/* nap-adjust: classic-style −/+ 5-minute nudger. dict ID, Col ("start"|"end") */}}
+{{define "nap-adjust"}}
+<span class="inline-flex items-center gap-1">
+  <button hx-post="/simple/naps/{{.ID}}/adjust" hx-vals='{"col":"{{.Col}}","delta":"-5"}' hx-target="#card-sleep" hx-swap="outerHTML"
+          class="grid h-7 w-7 place-items-center rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold select-none">−</button>
+  <button hx-post="/simple/naps/{{.ID}}/adjust" hx-vals='{"col":"{{.Col}}","delta":"5"}' hx-target="#card-sleep" hx-swap="outerHTML"
+          class="grid h-7 w-7 place-items-center rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold select-none">+</button>
+</span>
 {{end}}
 
 
@@ -239,20 +260,8 @@ document.addEventListener('htmx:oobAfterSwap', e => {
   </div>
 
   {{else}}
-  {{/* idle: records + today's sessions (with inline edit) */}}
+  {{/* idle: today's sessions (with inline edit). Records live on the stats tab. */}}
   <div class="hidden group-data-[open=true]/card:block">
-    <div class="grid grid-cols-2 gap-2 px-[18px] pb-4 pt-0.5">
-      <div class="flex flex-col gap-0.5 rounded-xl border {{if .Records.Calm.Set}}border-emerald-100 bg-emerald-50{{else}}border-stone-200 bg-stone-50{{end}} px-3.5 py-3">
-        <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-700">Longest calm</span>
-        <span class="text-2xl font-light leading-[30px] tabular-nums">{{if .Records.Calm.Set}}{{dur .Records.Calm.Mins}}{{else}}—{{end}}</span>
-        {{if .Records.Calm.Set}}<span class="text-xs text-stone-500">{{dateShort .Records.Calm.Date}}</span>{{end}}
-      </div>
-      <div class="flex flex-col gap-0.5 rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-3">
-        <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-600">Longest overall</span>
-        <span class="text-2xl font-light leading-[30px] tabular-nums">{{if .Records.Overall.Set}}{{dur .Records.Overall.Mins}}{{else}}—{{end}}</span>
-        {{if .Records.Overall.Set}}<span class="text-xs text-stone-500">{{dateShort .Records.Overall.Date}}</span>{{end}}
-      </div>
-    </div>
     {{if .Sessions}}
     <div class="border-t border-stone-100">
       {{range .Sessions}}
@@ -350,90 +359,11 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 {{end}}
 
 
-{{/* ══════════════════ card-outings (VM: outingsVM) ══════════════════ */}}
-{{define "card-outings"}}
-<section id="card-outings" data-card="outings" data-open="false" aria-label="Outings" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
-         class="group/card overflow-hidden rounded-2xl border border-stone-200 bg-white">
-  <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
-    <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
-      <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Outings
-        <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
-      <span class="max-w-full truncate text-[15px] leading-5">
-        {{if .Outings}}{{len .Outings}} today · last {{clock .Last.At}}{{if .Last.Where}} {{index .Last.Where 0}}{{else if .Last.What}} {{index .Last.What 0}}{{end}}{{else}}None yet today{{end}}
-      </span>
-    </button>
-    {{if .IsToday}}
-    <button hx-get="/simple/outings/new" hx-target="#outing-form-slot" hx-swap="innerHTML" data-open-card
-            class="h-9 shrink-0 rounded-full border border-emerald-200 bg-emerald-100 px-4 text-sm font-medium text-emerald-800">＋ Add</button>
-    {{end}}
-  </div>
-  <div class="hidden group-data-[open=true]/card:block">
-    <div id="outing-form-slot"></div>
-    {{if .Outings}}
-    {{range .Outings}}
-    <button {{if $.IsToday}}hx-get="/simple/outings/{{.ID}}/edit" hx-target="#outing-form-slot" hx-swap="innerHTML"{{end}} type="button"
-            class="flex w-full items-start gap-3.5 border-t border-stone-100 py-3 pl-[18px] pr-3 text-left">
-      <span class="pt-px text-[15px] font-medium tabular-nums">{{clock .At}}</span>
-      <span class="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span class="text-sm{{if not .Where}} text-stone-400{{end}}">{{if .Where}}{{joinDot .Where}}{{else}}No place set{{end}}</span>
-        {{if .What}}<span class="flex flex-wrap gap-1">{{range .What}}<span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800">{{.}}</span>{{end}}</span>{{end}}
-      </span>
-      {{if $.IsToday}}<svg class="mt-1 h-3 w-[7px] text-stone-300" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5L6.5 7l-5 5.5"/></svg>{{end}}
-    </button>
-    {{end}}
-    {{else}}
-    <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">No outings logged yet today.</p>
-    {{end}}
-  </div>
-</section>
-{{end}}
-
-
-{{/* outing-form (VM: outingFormVM) */}}
-{{define "outing-form"}}
-<form {{if .Editing}}hx-put="/simple/outings/{{.ID}}"{{else}}hx-post="/simple/outings"{{end}} hx-target="#card-outings" hx-swap="outerHTML"
-      hx-on:change="this.querySelector('[type=submit]').disabled = !this.querySelector('input[type=checkbox]:checked')"
-      class="flex flex-col gap-[18px] border-t border-stone-100 bg-indigo-50/40 px-[18px] py-4">
-  <div class="flex items-baseline justify-between gap-2">
-    <span class="text-[15px] font-medium">{{if .Editing}}Edit outing{{else}}New outing{{end}}</span>
-    <span class="text-[13px] tabular-nums text-stone-500">{{if .Editing}}{{clock .At}}{{else}}now · {{clock .At}}{{end}}</span>
-  </div>
-  <fieldset class="flex flex-col gap-2">
-    <legend class="mb-2 flex items-baseline gap-1.5"><span class="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Where</span><span class="text-xs text-stone-400">pick any</span></legend>
-    <div class="flex flex-wrap gap-1.5">
-      {{range .Places}}
-      <label class="group cursor-pointer">
-        <input type="checkbox" name="where" value="{{.}}" class="peer sr-only"{{if index $.Where .}} checked{{end}}>
-        <span class="inline-flex h-[34px] items-center rounded-full border border-stone-200 bg-white px-[13px] text-[13px] text-stone-700 peer-checked:border-indigo-200 peer-checked:bg-indigo-100 peer-checked:font-medium peer-checked:text-indigo-800">{{.}}</span>
-      </label>
-      {{end}}
-    </div>
-  </fieldset>
-  <fieldset class="flex flex-col gap-2">
-    <legend class="mb-2 flex items-baseline gap-1.5"><span class="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">What</span><span class="text-xs text-stone-400">pick any</span></legend>
-    <div class="flex flex-wrap gap-1.5">
-      {{range .Whats}}
-      <label class="group cursor-pointer">
-        <input type="checkbox" name="what" value="{{.}}" class="peer sr-only"{{if index $.What .}} checked{{end}}>
-        <span class="inline-flex h-[34px] items-center rounded-full border border-stone-200 bg-white px-[13px] text-[13px] text-stone-700 peer-checked:border-indigo-200 peer-checked:bg-indigo-100 peer-checked:font-medium peer-checked:text-indigo-800">{{.}}</span>
-      </label>
-      {{end}}
-    </div>
-  </fieldset>
-  <div class="flex items-center gap-2">
-    {{if .Editing}}<button type="button" hx-delete="/simple/outings/{{.ID}}" hx-target="#card-outings" hx-swap="outerHTML" class="h-[38px] px-1 text-[13px] text-rose-800">Delete</button>{{end}}
-    <div class="flex-1"></div>
-    <button type="button" hx-get="/simple/outings/card" hx-target="#card-outings" hx-swap="outerHTML" class="h-[38px] px-3.5 text-sm text-stone-600">Cancel</button>
-    <button type="submit" class="h-[38px] rounded-full bg-indigo-600 px-5 text-sm font-medium text-white disabled:bg-stone-200 disabled:text-stone-500">{{if .Editing}}Save{{else}}Log outing{{end}}</button>
-  </div>
-</form>
-{{end}}
-
 
 {{/* toast (sent out-of-band). VM: dict Msg Token Target */}}
 {{define "toast"}}
 <div id="toast" hx-swap-oob="true" role="status"
-     class="fixed bottom-[76px] left-1/2 z-40 flex w-[calc(100%-36px)] max-w-[354px] -translate-x-1/2 items-center gap-3 rounded-xl bg-stone-800 py-0.5 pl-4 pr-1 text-[13px] text-stone-50">
+     class="fixed bottom-[76px] left-1/2 z-50 flex w-[calc(100%-36px)] max-w-[354px] -translate-x-1/2 items-center gap-3 rounded-xl bg-stone-800 py-0.5 pl-4 pr-1 text-[13px] text-stone-50">
   <span class="min-w-0 flex-1">{{.Msg}}</span>
   {{if .Token}}<button hx-post="/simple/undo/{{.Token}}" hx-target="{{.Target}}" hx-swap="outerHTML" class="h-10 px-3.5 text-[13px] font-medium text-indigo-200">Undo</button>{{end}}
 </div>
