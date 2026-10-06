@@ -11,9 +11,10 @@ import (
 
 // toastVM is the out-of-band toast with an optional undo action.
 type toastVM struct {
-	Msg    string
-	Token  string // "verb:id"; empty = no undo button
-	Target string // card id the undo swaps, e.g. "#card-poop"
+	Msg     string
+	Token   string // "verb:id"; empty = no undo button. Undo posts to /simple/undo/.
+	Target  string // card id the undo swaps, e.g. "#card-poop"
+	UndoURL string // unused here; present so the shared toast template type-checks
 }
 
 // respond writes the primary card for today plus, out of band, the other running

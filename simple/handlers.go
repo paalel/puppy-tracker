@@ -1,6 +1,6 @@
 // Package simple serves the pared-down "simplified" version of the app for a
 // grown dog: a single Today screen with quick logging for poop, sleep, home-alone
-// and outings. It runs alongside the classic version (package sessions); main
+// and training. It runs alongside the classic version (package sessions); main
 // dispatches the home page to whichever the configured mode selects.
 package simple
 
@@ -14,13 +14,18 @@ import (
 	"puppy/store"
 )
 
+// trainingCardFn builds the training card for a date at a given column order.
+// Injected by main so the simple package stays decoupled from the training one.
+type trainingCardFn func(date string, order int) (any, error)
+
 type Handler struct {
-	db   *sql.DB
-	tmpl *template.Template
+	db       *sql.DB
+	tmpl     *template.Template
+	training trainingCardFn
 }
 
-func New(db *sql.DB, tmpl *template.Template) *Handler {
-	return &Handler{db: db, tmpl: tmpl}
+func New(db *sql.DB, tmpl *template.Template, training trainingCardFn) *Handler {
+	return &Handler{db: db, tmpl: tmpl, training: training}
 }
 
 // RegisterRoutes registers the simplified action/fragment routes.

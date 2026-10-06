@@ -38,6 +38,7 @@
     {{template "card-poop" .Poop}}
     {{template "card-sleep" .Sleep}}
     {{template "card-alone" .Alone}}
+    {{template "card-training" .Training}}
 
 </main>
 
@@ -359,12 +360,62 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 {{end}}
 
 
+{{/* ══════════════════ card-training (VM: training cardVM) ══════════════════ */}}
+{{define "card-training"}}
+<section id="card-training" data-card="training" data-open="false" aria-label="Training" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
+         class="group/card overflow-hidden rounded-2xl border border-stone-200 bg-white">
+  <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
+    <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
+      <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Training
+        <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
+      <span class="max-w-full truncate text-[15px] leading-5">
+        {{if not .Skills}}No skills yet{{else}}{{.DoneCount}}/{{len .Skills}} done{{if .TotalToday}} · {{.TotalToday}} today{{end}}{{end}}
+      </span>
+    </button>
+  </div>
+  <div class="hidden group-data-[open=true]/card:block">
+    {{if not .Skills}}
+    <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">Add skills in Settings.</p>
+    {{else}}
+    {{range .Skills}}
+    {{$sid := .ID}}
+    <div class="border-t border-stone-100 px-[18px] py-3">
+      <div class="flex items-baseline justify-between gap-2">
+        <span class="text-[15px] font-medium leading-5">{{.Name}}</span>
+        <span class="shrink-0 text-[13px] {{if .Met}}font-medium text-emerald-700{{else}}text-stone-500{{end}}">{{.Count}}/{{.Target}} {{if .Weekly}}this week{{else}}today{{end}}</span>
+      </div>
+      {{if .Instruction}}<p class="mt-0.5 text-[13px] leading-[18px] text-stone-400">{{.Instruction}}</p>{{end}}
+      {{if $.IsToday}}
+      <div class="mt-2 flex gap-1.5">
+        {{range $.Qualities}}
+        <button hx-post="/simple/training/skill/{{$sid}}/log" hx-vals='{"quality":"{{.}}"}' hx-target="#card-training" hx-swap="outerHTML"
+                class="h-[34px] min-w-0 flex-1 whitespace-nowrap rounded-full border px-1.5 text-[13px] font-medium {{qualityPill .}}">{{qualityLabel .}}</button>
+        {{end}}
+      </div>
+      {{end}}
+      {{if .Reps}}
+      <div class="mt-2 hidden flex-wrap gap-1 group-data-[open=true]/card:flex">
+        {{range .Reps}}
+        <button hx-delete="/simple/training/rep/{{.ID}}" hx-target="#card-training" hx-swap="outerHTML" aria-label="Remove rep"
+                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs {{qualityPill .Quality}}">{{clock .At}} {{qualityLabel .Quality}} ·<span class="font-semibold">×</span></button>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+    {{end}}
+  </div>
+</section>
+{{end}}
 
-{{/* toast (sent out-of-band). VM: dict Msg Token Target */}}
+
+
+{{/* toast (sent out-of-band). Fields: Msg, Target, and either Token (undo via
+     /simple/undo/) or an explicit UndoURL (used by the training card). */}}
 {{define "toast"}}
 <div id="toast" hx-swap-oob="true" role="status"
      class="fixed bottom-[76px] left-1/2 z-50 flex w-[calc(100%-36px)] max-w-[354px] -translate-x-1/2 items-center gap-3 rounded-xl bg-stone-800 py-0.5 pl-4 pr-1 text-[13px] text-stone-50">
   <span class="min-w-0 flex-1">{{.Msg}}</span>
-  {{if .Token}}<button hx-post="/simple/undo/{{.Token}}" hx-target="{{.Target}}" hx-swap="outerHTML" class="h-10 px-3.5 text-[13px] font-medium text-indigo-200">Undo</button>{{end}}
+  {{if or .Token .UndoURL}}<button hx-post="{{if .UndoURL}}{{.UndoURL}}{{else}}/simple/undo/{{.Token}}{{end}}" hx-target="{{.Target}}" hx-swap="outerHTML" class="h-10 px-3.5 text-[13px] font-medium text-indigo-200">Undo</button>{{end}}
 </div>
 {{end}}

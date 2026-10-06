@@ -14,6 +14,7 @@ import (
 	"puppy/simple"
 	"puppy/stats"
 	"puppy/store"
+	"puppy/training"
 )
 
 func newTestApp(t *testing.T) http.Handler {
@@ -36,7 +37,11 @@ func newTestApp(t *testing.T) http.Handler {
 	mux := http.NewServeMux()
 	classic := sessions.New(db, tmpl)
 	classic.RegisterRoutes(mux)
-	simplified := simple.New(db, tmpl)
+	trainingH := training.New(db, tmpl)
+	trainingH.RegisterRoutes(mux)
+	simplified := simple.New(db, tmpl, func(date string, order int) (any, error) {
+		return trainingH.BuildCard(date, order)
+	})
 	simplified.RegisterRoutes(mux)
 	routine.New(db, tmpl).RegisterRoutes(mux)
 	stats.New(db, tmpl).RegisterRoutes(mux)

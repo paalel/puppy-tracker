@@ -20,6 +20,7 @@ type pageVM struct {
 	Poop     *poopVM
 	Sleep    *sleepVM
 	Alone    *aloneVM
+	Training any // training card VM, built by the injected trainingCardFn
 }
 
 type poopVM struct {
@@ -98,8 +99,12 @@ func (h *Handler) buildPage(date string) (*pageVM, error) {
 	if err != nil {
 		return nil, err
 	}
+	training, err := h.training(date, 13) // fixed slot after the timer cards
+	if err != nil {
+		return nil, err
+	}
 	// Each builder computes its own order (so single-card swaps stay correct).
-	return &pageVM{Config: cfg, Date: date, Poop: poop, Sleep: sleep, Alone: alone}, nil
+	return &pageVM{Config: cfg, Date: date, Poop: poop, Sleep: sleep, Alone: alone, Training: training}, nil
 }
 
 func (h *Handler) buildPoop(date string) (*poopVM, error) {

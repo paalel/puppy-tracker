@@ -76,6 +76,26 @@ func parseTemplates() (*template.Template, error) {
 			}
 		},
 		"joinDot": func(s []string) string { return strings.Join(s, " · ") },
+		"qualityLabel": func(q string) string {
+			if q == "" {
+				return ""
+			}
+			return strings.ToUpper(q[:1]) + q[1:]
+		},
+		// qualityPill: badge colours for a training quality mark.
+		"qualityPill": func(q string) string {
+			switch q {
+			case "bad":
+				return "border-rose-200 bg-rose-100 text-rose-800"
+			case "okay":
+				return "border-amber-200 bg-amber-100 text-amber-800"
+			case "good":
+				return "border-emerald-200 bg-emerald-100 text-emerald-800"
+			case "excellent":
+				return "border-emerald-600 bg-emerald-600 text-white"
+			}
+			return "border-stone-200 bg-stone-100 text-stone-700"
+		},
 		"whereLabel": func(v string) string {
 			switch v {
 			case "cage":
