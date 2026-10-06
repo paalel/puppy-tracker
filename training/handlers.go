@@ -52,14 +52,19 @@ type cardVM struct {
 	Qualities  []string
 }
 
-// BuildCard assembles the training card for a date. order is the card's fixed
-// slot in the simplified column. Exported so the simple page can embed it.
-func (h *Handler) BuildCard(date string, order int) (*cardVM, error) {
+// cardOrder is the training card's fixed slot in the simplified column — below
+// the poop/sleep/alone cards, which can pin to the top while a timer runs. The
+// training card itself never moves.
+const cardOrder = 20
+
+// BuildCard assembles the training card for a date. Exported so the simple page
+// can embed it. Always rendered at its fixed order so re-renders don't reorder.
+func (h *Handler) BuildCard(date string) (*cardVM, error) {
 	skills, err := listSkills(h.db)
 	if err != nil {
 		return nil, err
 	}
-	vm := &cardVM{Order: order, IsToday: date == store.RolloverDate(), Qualities: Qualities}
+	vm := &cardVM{Order: cardOrder, IsToday: date == store.RolloverDate(), Qualities: Qualities}
 	for _, s := range skills {
 		count, err := progressCount(h.db, s, date)
 		if err != nil {
@@ -79,7 +84,7 @@ func (h *Handler) BuildCard(date string, order int) (*cardVM, error) {
 }
 
 func (h *Handler) renderCard(w http.ResponseWriter, toast *toastVM) {
-	vm, err := h.BuildCard(store.RolloverDate(), 0)
+	vm, err := h.BuildCard(store.RolloverDate())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

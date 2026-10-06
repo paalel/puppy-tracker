@@ -39,9 +39,7 @@ func newTestApp(t *testing.T) http.Handler {
 	classic.RegisterRoutes(mux)
 	trainingH := training.New(db, tmpl)
 	trainingH.RegisterRoutes(mux)
-	simplified := simple.New(db, tmpl, func(date string, order int) (any, error) {
-		return trainingH.BuildCard(date, order)
-	})
+	simplified := simple.New(db, tmpl, func(date string) (any, error) { return trainingH.BuildCard(date) })
 	simplified.RegisterRoutes(mux)
 	routine.New(db, tmpl).RegisterRoutes(mux)
 	stats.New(db, tmpl).RegisterRoutes(mux)

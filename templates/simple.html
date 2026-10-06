@@ -15,19 +15,20 @@
       tailwind.config = { theme: { extend: { colors: { page: '#F7F6F3' } } } };
     </script>
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    {{template "styles" .}}
 </head>
-<body class="bg-page text-stone-900 antialiased">
+<body class="bg-page text-stone-800 antialiased">
 
 <main class="mx-auto flex max-w-[390px] flex-col gap-3 px-[18px] pb-28 pt-6">
 
     <header class="order-[-2] flex flex-col gap-0.5 px-1 pt-1">
         <h1 class="text-[19px] font-semibold leading-[26px]">Puppy Tracker 🦆</h1>
-        <p class="text-[13px] leading-[18px] text-stone-600">{{.Config.PuppyName}}{{if .Config.Birthdate}} · {{ageMonthsWeeks .Config.Birthdate}}{{end}}</p>
+        <p class="text-xs leading-[18px] text-stone-600">{{.Config.PuppyName}}{{if .Config.Birthdate}} · {{ageMonthsWeeks .Config.Birthdate}}{{end}}</p>
     </header>
 
     <div class="order-[-1] flex items-center justify-between pb-0.5 pt-1">
         <a href="/?date={{.PrevDate}}" class="grid h-10 w-10 place-items-center text-[17px]" aria-label="Previous day">←</a>
-        <div class="text-[15px] font-medium text-stone-700">{{dayLabel .Date}}</div>
+        <div class="text-sm font-medium text-stone-700">{{dayLabel .Date}}</div>
         {{if .NextDate}}
         <a href="/?date={{.NextDate}}" class="grid h-10 w-10 place-items-center text-[17px]" aria-label="Next day">→</a>
         {{else}}
@@ -109,28 +110,28 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 {{/* ══════════════════ card-poop (VM: poopVM) ══════════════════ */}}
 {{define "card-poop"}}
 <section id="card-poop" data-card="poop" data-open="false" aria-label="Poop" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
-         class="group/card overflow-hidden rounded-2xl border border-stone-200 bg-white">
+         class="group/card overflow-hidden rounded-2xl shadow-sm border border-stone-200 bg-white">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
-      <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Poop
+      <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Poop
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
-      <span class="max-w-full truncate text-[15px] leading-5">
+      <span class="max-w-full truncate text-sm leading-5">
         {{if and (eq .Count 0) (eq .Accidents 0)}}None yet today{{else}}{{.Count}} today · last {{clock .Last}}{{if .Accidents}}<span class="text-rose-800"> · {{.Accidents}} accident{{if gt .Accidents 1}}s{{end}}</span>{{end}}{{end}}
       </span>
-      {{if .HasChance}}<span class="text-[13px] leading-4 text-amber-700">{{.ChancePct}}% poop chance now</span>{{end}}
+      {{if .HasChance}}<span class="text-xs leading-4 text-amber-700">{{.ChancePct}}% poop chance now</span>{{end}}
     </button>
     {{if .IsToday}}
     <button hx-post="/simple/poops" hx-vals='{"kind":"accident"}' hx-target="#card-poop" hx-swap="outerHTML"
-            class="h-9 shrink-0 rounded-full border border-rose-200 bg-rose-50 px-3 text-[13px] font-medium text-rose-800">Accident</button>
+            class="h-9 shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-medium text-rose-800">Accident</button>
     <button hx-post="/simple/poops" hx-vals='{"kind":"poop"}' hx-target="#card-poop" hx-swap="outerHTML"
-            class="h-9 shrink-0 rounded-full border border-amber-200 bg-amber-100 px-4 text-sm font-medium text-amber-800">＋ Poop</button>
+            class="h-9 shrink-0 rounded-lg border border-amber-200 bg-amber-100 px-4 text-sm font-medium text-amber-800">＋ Poop</button>
     {{end}}
   </div>
   <div class="hidden group-data-[open=true]/card:block">
     {{if .Poops}}
     {{range .Poops}}
     <div class="flex min-h-[42px] items-center gap-3.5 border-t {{if .IsAccident}}border-rose-100 bg-rose-50{{else}}border-stone-100{{end}} pl-[18px] pr-2">
-      <span class="text-[15px] font-medium tabular-nums{{if .IsAccident}} text-rose-800{{end}}">{{clock .At}}</span>
+      <span class="text-sm font-medium tabular-nums{{if .IsAccident}} text-rose-800{{end}}">{{clock .At}}</span>
       <span class="min-w-0 flex-1 text-sm {{if .IsAccident}}text-rose-800{{else}}text-stone-500{{end}}">{{if .IsAccident}}Accident indoors{{else}}Poop{{end}}</span>
       <span class="text-xs text-stone-400">{{ago .At}}</span>
       {{if $.IsToday}}
@@ -149,18 +150,18 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 {{/* ══════════════════ card-sleep (VM: sleepVM) ══════════════════ */}}
 {{define "card-sleep"}}
 <section id="card-sleep" data-card="sleep" data-open="false" aria-label="Sleep" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
-         class="group/card overflow-hidden rounded-2xl border {{if .Running}}border-indigo-200 bg-indigo-50{{else}}border-stone-200 bg-white{{end}}">
+         class="group/card overflow-hidden rounded-2xl shadow-sm border {{if .Running}}border-indigo-200 bg-indigo-50{{else}}border-stone-200 bg-white{{end}}">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
-      <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Sleep
+      <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Sleep
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
-      <span class="max-w-full truncate text-[15px] leading-5{{if .Running}} text-indigo-800{{end}}">
+      <span class="max-w-full truncate text-sm leading-5{{if .Running}} text-indigo-800{{end}}">
         {{if .Running}}Asleep since {{clock .Running.Started}}{{else if eq .Count 0}}No naps yet today{{else}}{{.Count}} nap{{if gt .Count 1}}s{{end}} · {{dur .TotalMins}} · woke {{clock .Woke}}{{end}}
       </span>
     </button>
     {{if and .IsToday (not .Running)}}
     <button hx-post="/simple/naps/start" hx-target="#card-sleep" hx-swap="outerHTML"
-            class="h-9 shrink-0 rounded-full border border-indigo-200 bg-indigo-100 px-4 text-sm font-medium text-indigo-800">Start</button>
+            class="h-9 shrink-0 rounded-lg border border-indigo-200 bg-indigo-100 px-4 text-sm font-medium text-indigo-800">Start</button>
     {{end}}
   </div>
 
@@ -168,14 +169,14 @@ document.addEventListener('htmx:oobAfterSwap', e => {
   <div class="flex flex-col items-center px-[18px] pb-2">
     <div data-timer data-start="{{isoUTC .Running.Started}}" aria-label="Sleep elapsed"
          class="mb-2 mt-0.5 text-[68px] font-light leading-none tracking-[-0.03em] text-indigo-950 tabular-nums">0:00<span data-timer-sec class="text-[34px] tracking-[-0.01em] text-indigo-400"></span></div>
-    <div class="mb-3 flex items-center gap-1.5 text-[13px] text-stone-500">
+    <div class="mb-3 flex items-center gap-1.5 text-xs text-stone-500">
       <span>Started {{clock .Running.Started}}</span>
       {{template "nap-adjust" dict "ID" .Running.ID "Col" "start"}}
     </div>
     <button hx-post="/simple/naps/stop" hx-target="#card-sleep" hx-swap="outerHTML"
-            class="h-11 w-full rounded-full bg-indigo-600 text-[15px] font-medium text-white">Wake</button>
+            class="h-11 w-full rounded-xl bg-indigo-600 text-sm font-medium text-white">Wake</button>
     <button hx-post="/simple/naps/discard" hx-target="#card-sleep" hx-swap="outerHTML"
-            class="mt-0.5 h-9 px-3 text-[13px] text-stone-600">Discard timer</button>
+            class="mt-0.5 h-9 px-3 text-xs text-stone-600">Discard timer</button>
   </div>
   {{end}}
 
@@ -185,8 +186,8 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       {{range .Naps}}
       <div class="border-t border-stone-100 first:border-t-0 py-2 pl-[18px] pr-2">
         <div class="flex min-h-[30px] items-center gap-3">
-          <span class="text-[15px] font-medium tabular-nums">{{clock .Started}}</span>
-          <span class="text-[13px] text-stone-400">→</span>
+          <span class="text-sm font-medium tabular-nums">{{clock .Started}}</span>
+          <span class="text-xs text-stone-400">→</span>
           <span class="flex-1 text-sm text-indigo-800">{{dur .Minutes}}</span>
           {{if $.IsToday}}<button hx-delete="/simple/naps/{{.ID}}" hx-target="#card-sleep" hx-swap="outerHTML" aria-label="Remove nap" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>{{end}}
         </div>
@@ -220,18 +221,18 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 {{/* ══════════════════ card-alone (VM: aloneVM) ══════════════════ */}}
 {{define "card-alone"}}
 <section id="card-alone" data-card="alone" data-open="false" aria-label="Home alone" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
-         class="group/card overflow-hidden rounded-2xl border {{if .Running}}border-sky-200{{else}}border-stone-200{{end}} bg-white">
+         class="group/card overflow-hidden rounded-2xl shadow-sm border {{if .Running}}border-sky-200{{else}}border-stone-200{{end}} bg-white">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5{{if .Running}} bg-sky-50{{end}}">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
-      <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Home alone
+      <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Home alone
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
-      <span class="max-w-full truncate text-[15px] leading-5{{if .Running}} text-sky-700{{end}}">
+      <span class="max-w-full truncate text-sm leading-5{{if .Running}} text-sky-700{{end}}">
         {{if .Running}}Alone since {{clock .Running.Started}}{{else if .Sessions}}{{dur .TodayMin}} alone today{{else}}None yet today{{end}}
       </span>
     </button>
     {{if and .IsToday (not .Running)}}
     <button hx-post="/simple/alone/start" hx-target="#card-alone" hx-swap="outerHTML"
-            class="h-9 shrink-0 rounded-full border border-sky-200 bg-sky-100 px-4 text-sm font-medium text-sky-700">Start</button>
+            class="h-9 shrink-0 rounded-lg border border-sky-200 bg-sky-100 px-4 text-sm font-medium text-sky-700">Start</button>
     {{end}}
   </div>
 
@@ -242,7 +243,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
          class="mb-4 mt-0.5 text-[64px] font-light leading-none tracking-[-0.03em] text-sky-900 tabular-nums">0:00<span data-timer-sec class="text-[32px] tracking-[-0.01em] text-sky-400"></span></div>
     {{if .TargetMin}}
     <div class="flex w-full flex-col gap-1.5" data-progress data-target-min="{{.TargetMin}}" data-start="{{isoUTC .Running.Started}}">
-      <div class="flex justify-between gap-2 text-[13px] text-stone-600">
+      <div class="flex justify-between gap-2 text-xs text-stone-600">
         <span>{{.TargetLabel}} {{dur .TargetMin}}</span>
         <span data-progress-label class="font-medium text-sky-700">…</span>
       </div>
@@ -255,9 +256,9 @@ document.addEventListener('htmx:oobAfterSwap', e => {
   <div class="px-[18px] pt-3.5">{{template "alone-controls" (dict "S" .Running "Editing" false)}}</div>
   <div class="flex flex-col items-center px-[18px] pb-[18px] pt-3.5">
     <button hx-post="/simple/alone/stop" hx-target="#card-alone" hx-swap="outerHTML"
-            class="h-11 w-full rounded-full bg-sky-700 text-[15px] font-medium text-white">Not alone anymore</button>
+            class="h-11 w-full rounded-xl bg-sky-700 text-sm font-medium text-white">Not alone anymore</button>
     <button hx-post="/simple/alone/discard" hx-target="#card-alone" hx-swap="outerHTML"
-            class="mt-0.5 h-9 px-3 text-[13px] text-stone-600">Discard timer</button>
+            class="mt-0.5 h-9 px-3 text-xs text-stone-600">Discard timer</button>
   </div>
 
   {{else}}
@@ -271,10 +272,10 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       {{else}}
       <button type="button" hx-get="/simple/alone/card?edit={{.ID}}" hx-target="#card-alone" hx-swap="outerHTML"
               class="flex w-full items-start gap-3.5 border-t border-stone-100 py-3 pl-[18px] pr-3 text-left first:border-t-0">
-        <span class="pt-px text-[15px] font-medium tabular-nums">{{clock .Started}}</span>
+        <span class="pt-px text-sm font-medium tabular-nums">{{clock .Started}}</span>
         <span class="flex min-w-0 flex-1 flex-col gap-1.5">
           <span class="flex items-center gap-2 text-sm font-medium text-sky-700">{{dur .Minutes}}
-            {{if $.IsCalmRecord .ID}}<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">Calm record</span>{{else if $.IsOverallRecord .ID}}<span class="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-700">Record</span>{{end}}
+            {{if $.IsCalmRecord .ID}}<span class="rounded-lg bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Calm record</span>{{else if $.IsOverallRecord .ID}}<span class="rounded-lg bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-700">Record</span>{{end}}
           </span>
           <span class="flex flex-wrap gap-1">{{template "alone-chips" .}}</span>
         </span>
@@ -295,12 +296,12 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 {{/* alone-chips: the chosen values of a session as small pills (VM: AloneSession) */}}
 {{define "alone-chips"}}
 {{if and (eq .Where "") (eq .Sleep "") (eq .Behaviour "") (not .Destroyed)}}
-<span class="rounded-full bg-stone-50 px-2 py-0.5 text-xs text-stone-500">No details yet</span>
+<span class="rounded-lg bg-stone-50 px-2 py-0.5 text-xs text-stone-500">No details yet</span>
 {{else}}
-{{if .Where}}<span class="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-700">{{whereLabel .Where}}</span>{{end}}
-{{if .Sleep}}<span class="rounded-full px-2 py-0.5 text-xs {{moodChip .Sleep}}">{{sleepLabel .Sleep}}</span>{{end}}
-{{if .Behaviour}}<span class="rounded-full px-2 py-0.5 text-xs {{moodChip .Behaviour}}">{{behaviourLabel .Behaviour}}</span>{{end}}
-{{if .Destroyed}}<span class="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-800">Destroyed</span>{{end}}
+{{if .Where}}<span class="rounded-lg bg-stone-100 px-2 py-0.5 text-xs text-stone-700">{{whereLabel .Where}}</span>{{end}}
+{{if .Sleep}}<span class="rounded-lg px-2 py-0.5 text-xs {{moodChip .Sleep}}">{{sleepLabel .Sleep}}</span>{{end}}
+{{if .Behaviour}}<span class="rounded-lg px-2 py-0.5 text-xs {{moodChip .Behaviour}}">{{behaviourLabel .Behaviour}}</span>{{end}}
+{{if .Destroyed}}<span class="rounded-lg bg-rose-100 px-2 py-0.5 text-xs text-rose-800">Destroyed</span>{{end}}
 {{end}}
 {{end}}
 
@@ -334,7 +335,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
     </div>
   </div>
   <button hx-patch="/simple/alone/{{$id}}" hx-vals='{"destroyed":"toggle"}' hx-target="#card-alone" hx-swap="outerHTML" aria-pressed="{{.S.Destroyed}}"
-          class="flex h-[34px] items-center gap-2 self-start rounded-full border px-3.5 text-[13px] {{if .S.Destroyed}}border-rose-200 bg-rose-100 font-medium text-rose-800{{else}}border-stone-200 bg-stone-100 text-stone-700{{end}}">
+          class="flex h-[34px] items-center gap-2 self-start rounded-lg border px-3.5 text-xs {{if .S.Destroyed}}border-rose-200 bg-rose-100 font-medium text-rose-800{{else}}border-stone-200 bg-stone-100 text-stone-700{{end}}">
     <span class="h-[7px] w-[7px] rounded-full {{if .S.Destroyed}}bg-rose-600{{else}}bg-stone-300{{end}}"></span>Destroyed something
   </button>
   <label class="flex flex-col gap-1.5">
@@ -345,8 +346,8 @@ document.addEventListener('htmx:oobAfterSwap', e => {
   </label>
   {{if .Editing}}
   <div class="flex items-center justify-between">
-    <button hx-delete="/simple/alone/{{$id}}" hx-target="#card-alone" hx-swap="outerHTML" class="h-[34px] px-0.5 text-[13px] text-rose-800">Delete</button>
-    <button hx-get="/simple/alone/card" hx-target="#card-alone" hx-swap="outerHTML" class="h-[34px] rounded-full border border-stone-200 bg-stone-100 px-[18px] text-[13px] font-medium">Done</button>
+    <button hx-delete="/simple/alone/{{$id}}" hx-target="#card-alone" hx-swap="outerHTML" class="h-[34px] px-0.5 text-xs text-rose-800">Delete</button>
+    <button hx-get="/simple/alone/card" hx-target="#card-alone" hx-swap="outerHTML" class="h-[34px] rounded-lg border border-stone-200 bg-stone-100 px-[18px] text-xs font-medium">Done</button>
   </div>
   {{end}}
 </div>
@@ -356,19 +357,19 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 {{/* alone-pill (VM: dict ID Field Value Label Sel Color) */}}
 {{define "alone-pill"}}
 <button hx-patch="/simple/alone/{{.ID}}" hx-vals='{"{{.Field}}":"{{.Value}}"}' hx-target="#card-alone" hx-swap="outerHTML" aria-pressed="{{.Sel}}"
-        class="h-[34px] min-w-0 flex-1 whitespace-nowrap rounded-full border px-1.5 text-[13px] {{if .Sel}}{{pillOn .Color}}{{else}}border-stone-200 bg-stone-100 text-stone-700{{end}}">{{.Label}}</button>
+        class="h-[34px] min-w-0 flex-1 whitespace-nowrap rounded-lg border px-1.5 text-xs {{if .Sel}}{{pillOn .Color}}{{else}}border-stone-200 bg-stone-100 text-stone-700{{end}}">{{.Label}}</button>
 {{end}}
 
 
 {{/* ══════════════════ card-training (VM: training cardVM) ══════════════════ */}}
 {{define "card-training"}}
 <section id="card-training" data-card="training" data-open="false" aria-label="Training" style="order:{{.Order}}" {{if .OOB}}hx-swap-oob="true"{{end}}
-         class="group/card overflow-hidden rounded-2xl border border-stone-200 bg-white">
+         class="group/card overflow-hidden rounded-2xl shadow-sm border border-stone-200 bg-white">
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
     <button type="button" data-toggle aria-expanded="false" class="group flex min-w-0 flex-1 flex-col items-start gap-[3px] py-1 text-left">
-      <span class="flex items-center gap-1.5 text-[11px] font-medium uppercase leading-4 tracking-[0.16em] text-stone-500">Training
+      <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Training
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
-      <span class="max-w-full truncate text-[15px] leading-5">
+      <span class="max-w-full truncate text-sm leading-5">
         {{if not .Skills}}No skills yet{{else}}{{.DoneCount}}/{{len .Skills}} done{{if .TotalToday}} · {{.TotalToday}} today{{end}}{{end}}
       </span>
     </button>
@@ -381,23 +382,23 @@ document.addEventListener('htmx:oobAfterSwap', e => {
     {{$sid := .ID}}
     <div class="border-t border-stone-100 px-[18px] py-3">
       <div class="flex items-baseline justify-between gap-2">
-        <span class="text-[15px] font-medium leading-5">{{.Name}}</span>
-        <span class="shrink-0 text-[13px] {{if .Met}}font-medium text-emerald-700{{else}}text-stone-500{{end}}">{{.Count}}/{{.Target}} {{if .Weekly}}this week{{else}}today{{end}}</span>
+        <span class="text-sm font-medium leading-5">{{.Name}}</span>
+        <span class="shrink-0 text-xs {{if .Met}}font-medium text-emerald-700{{else}}text-stone-500{{end}}">{{.Count}}/{{.Target}} {{if .Weekly}}this week{{else}}today{{end}}</span>
       </div>
-      {{if .Instruction}}<p class="mt-0.5 text-[13px] leading-[18px] text-stone-400">{{.Instruction}}</p>{{end}}
+      {{if .Instruction}}<p class="mt-0.5 text-xs leading-[18px] text-stone-400">{{.Instruction}}</p>{{end}}
       {{if $.IsToday}}
       <div class="mt-2 flex gap-1.5">
         {{range $.Qualities}}
         <button hx-post="/simple/training/skill/{{$sid}}/log" hx-vals='{"quality":"{{.}}"}' hx-target="#card-training" hx-swap="outerHTML"
-                class="h-[34px] min-w-0 flex-1 whitespace-nowrap rounded-full border px-1.5 text-[13px] font-medium {{qualityPill .}}">{{qualityLabel .}}</button>
+                class="h-[34px] min-w-0 flex-1 whitespace-nowrap rounded-lg border px-1.5 text-xs font-medium {{qualityPill .}}">{{qualityLabel .}}</button>
         {{end}}
       </div>
       {{end}}
       {{if .Reps}}
       <div class="mt-2 hidden flex-wrap gap-1 group-data-[open=true]/card:flex">
         {{range .Reps}}
-        <button hx-delete="/simple/training/rep/{{.ID}}" hx-target="#card-training" hx-swap="outerHTML" aria-label="Remove rep"
-                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs {{qualityPill .Quality}}">{{clock .At}} {{qualityLabel .Quality}} ·<span class="font-semibold">×</span></button>
+        <button hx-delete="/simple/training/rep/{{.ID}}" hx-target="#card-training" hx-swap="outerHTML" aria-label="Remove {{qualityLabel .Quality}} rep at {{clock .At}}"
+                class="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs {{qualityPill .Quality}}">{{clock .At}} <span class="font-semibold opacity-60">×</span></button>
         {{end}}
       </div>
       {{end}}
@@ -414,8 +415,8 @@ document.addEventListener('htmx:oobAfterSwap', e => {
      /simple/undo/) or an explicit UndoURL (used by the training card). */}}
 {{define "toast"}}
 <div id="toast" hx-swap-oob="true" role="status"
-     class="fixed bottom-[76px] left-1/2 z-50 flex w-[calc(100%-36px)] max-w-[354px] -translate-x-1/2 items-center gap-3 rounded-xl bg-stone-800 py-0.5 pl-4 pr-1 text-[13px] text-stone-50">
+     class="fixed bottom-[76px] left-1/2 z-50 flex w-[calc(100%-36px)] max-w-[354px] -translate-x-1/2 items-center gap-3 rounded-xl bg-stone-800 py-0.5 pl-4 pr-1 text-xs text-stone-50">
   <span class="min-w-0 flex-1">{{.Msg}}</span>
-  {{if or .Token .UndoURL}}<button hx-post="{{if .UndoURL}}{{.UndoURL}}{{else}}/simple/undo/{{.Token}}{{end}}" hx-target="{{.Target}}" hx-swap="outerHTML" class="h-10 px-3.5 text-[13px] font-medium text-indigo-200">Undo</button>{{end}}
+  {{if or .Token .UndoURL}}<button hx-post="{{if .UndoURL}}{{.UndoURL}}{{else}}/simple/undo/{{.Token}}{{end}}" hx-target="{{.Target}}" hx-swap="outerHTML" class="h-10 px-3.5 text-xs font-medium text-indigo-200">Undo</button>{{end}}
 </div>
 {{end}}

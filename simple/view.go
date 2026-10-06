@@ -99,7 +99,7 @@ func (h *Handler) buildPage(date string) (*pageVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	training, err := h.training(date, 13) // fixed slot after the timer cards
+	training, err := h.training(date)
 	if err != nil {
 		return nil, err
 	}

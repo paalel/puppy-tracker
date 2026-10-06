@@ -14,9 +14,9 @@ import (
 	"puppy/store"
 )
 
-// trainingCardFn builds the training card for a date at a given column order.
-// Injected by main so the simple package stays decoupled from the training one.
-type trainingCardFn func(date string, order int) (any, error)
+// trainingCardFn builds the training card VM for a date. Injected by main so the
+// simple package stays decoupled from the training one.
+type trainingCardFn func(date string) (any, error)
 
 type Handler struct {
 	db       *sql.DB
