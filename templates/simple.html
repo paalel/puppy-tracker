@@ -395,7 +395,7 @@ function scheduleToastClear() {
   <button type="button" data-ex-toggle aria-expanded="false"
           class="flex w-full items-center gap-2.5 py-3 pl-[18px] pr-3.5 text-left group-data-[ex-open=true]/ex:hidden">
     <span class="min-w-0 flex-1 truncate text-sm font-medium">{{.Name}}</span>
-    <span class="shrink-0 text-xs font-medium {{if .Met}}text-emerald-700{{else}}text-stone-600{{end}}">{{if .Met}}{{.Target}}{{else}}{{.Count}}{{end}}/{{.Target}}{{if .Met}} ✓{{end}}{{if .Over}} +{{.Over}}{{end}}</span>
+    <span class="shrink-0 text-xs font-medium {{if .Met}}text-emerald-700{{else}}text-stone-600{{end}}">{{.Count}}/{{.Target}}{{if .Met}} ✓{{end}}</span>
     <span class="flex min-w-0 shrink items-center gap-[3px] overflow-hidden">
       {{range .Reps}}<span class="h-2 w-2 shrink-0 rounded-full {{qualityDot .Quality}}"></span>{{end}}
     </span>
@@ -410,7 +410,7 @@ function scheduleToastClear() {
         {{if .Instruction}}<span class="text-xs leading-[18px] text-stone-500">{{.Instruction}}</span>{{end}}
       </span>
       <span class="flex shrink-0 items-baseline gap-1.5 pt-0.5 text-xs">
-        <span class="font-medium {{if .Met}}text-emerald-700{{else}}text-stone-600{{end}}">{{if .Met}}{{.Target}}{{else}}{{.Count}}{{end}}/{{.Target}}{{if .Met}} ✓{{end}}{{if .Over}} +{{.Over}}{{end}}</span>
+        <span class="font-medium {{if .Met}}text-emerald-700{{else}}text-stone-600{{end}}">{{.Count}}/{{.Target}}{{if .Met}} ✓{{end}}</span>
         <span class="text-stone-500">{{if .Weekly}}this week{{else}}today{{end}}</span>
       </span>
     </button>

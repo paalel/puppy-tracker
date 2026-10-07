@@ -40,7 +40,6 @@ type skillVM struct {
 	Skill
 	Count   int
 	Met     bool
-	Over    int // reps beyond target (0 if not over)
 	Reps    []Rep
 	IsToday bool
 }
@@ -76,12 +75,8 @@ func (h *Handler) BuildCard(date string) (*cardVM, error) {
 		if err != nil {
 			return nil, err
 		}
-		over := 0
-		if count > s.Target {
-			over = count - s.Target
-		}
 		vm.Skills = append(vm.Skills, skillVM{
-			Skill: s, Count: count, Met: count >= s.Target, Over: over, Reps: reps, IsToday: vm.IsToday,
+			Skill: s, Count: count, Met: count >= s.Target, Reps: reps, IsToday: vm.IsToday,
 		})
 		vm.TotalToday += len(reps)
 		if count >= s.Target {
