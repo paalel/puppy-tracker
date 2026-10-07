@@ -47,17 +47,15 @@ type sleepVM struct {
 }
 
 type aloneVM struct {
-	Order    int
-	OOB      bool
-	Running  *AloneSession
-	Sessions []AloneSession // completed today, newest first
-	Records  AloneRecords
-	EditID   int // >0 → that earlier session is in edit mode
-	TodayMin int // total alone minutes today
-	IsToday  bool
-	// Running-only progress target:
-	TargetMin   int    // 0 → no record yet, hide progress
-	TargetLabel string // "Calm record 2h 15m" / "Overall record 3h 40m"
+	Order     int
+	OOB       bool
+	PuppyName string
+	Running   *AloneSession
+	Sessions  []AloneSession // completed today, newest first
+	Records   AloneRecords
+	EditID    int // >0 → that earlier session is in edit mode
+	TodayMin  int // total alone minutes today
+	IsToday   bool
 }
 
 // computeOrders assigns CSS order values: running sessions float to the top,
@@ -180,6 +178,9 @@ func (h *Handler) buildAlone(date string, editID int) (*aloneVM, error) {
 		return nil, err
 	}
 	vm := &aloneVM{Order: 12, Records: rec, EditID: editID, IsToday: date == today()}
+	if cfg, err := config.Get(h.db); err == nil {
+		vm.PuppyName = cfg.PuppyName
+	}
 	for _, a := range all {
 		if a.ID == runID {
 			continue // running one is shown separately
@@ -189,7 +190,6 @@ func (h *Handler) buildAlone(date string, editID int) (*aloneVM, error) {
 	}
 	if vm.IsToday && running != nil {
 		vm.Running = running
-		vm.TargetMin, vm.TargetLabel = progressTarget(running, rec)
 	}
 	if vm.IsToday {
 		rn, err := runningNap(h.db)
@@ -199,19 +199,6 @@ func (h *Handler) buildAlone(date string, editID int) (*aloneVM, error) {
 		vm.Order = computeOrders(rn, running)["alone"]
 	}
 	return vm, nil
-}
-
-// progressTarget picks which record the running session is chasing: the calm
-// record while it still qualifies as calm, otherwise the overall record.
-func progressTarget(a *AloneSession, rec AloneRecords) (int, string) {
-	chasingCalm := (a.Behaviour == "" || a.Behaviour == "calm") && !a.Destroyed
-	if chasingCalm && rec.Calm.Set() {
-		return rec.Calm.Mins, "Calm record"
-	}
-	if rec.Overall.Set() {
-		return rec.Overall.Mins, "Overall record"
-	}
-	return 0, ""
 }
 
 // recordHolder reports whether session id holds the calm and/or overall record.

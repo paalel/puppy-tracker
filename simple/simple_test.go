@@ -34,41 +34,6 @@ func TestComputeOrders(t *testing.T) {
 	}
 }
 
-func TestProgressTarget(t *testing.T) {
-	rec := AloneRecords{
-		Calm:    AloneRecord{Mins: 135},
-		Overall: AloneRecord{Mins: 220},
-	}
-	cases := []struct {
-		name     string
-		s        AloneSession
-		wantMin  int
-		wantCalm bool
-	}{
-		{"unset behaviour chases calm", AloneSession{}, 135, true},
-		{"calm chases calm", AloneSession{Behaviour: "calm"}, 135, true},
-		{"stressed chases overall", AloneSession{Behaviour: "stressed"}, 220, false},
-		{"destroyed chases overall", AloneSession{Behaviour: "calm", Destroyed: true}, 220, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			s := c.s
-			min, label := progressTarget(&s, rec)
-			if min != c.wantMin {
-				t.Errorf("target = %d, want %d", min, c.wantMin)
-			}
-			if (label == "Calm record") != c.wantCalm {
-				t.Errorf("label = %q, want calm=%v", label, c.wantCalm)
-			}
-		})
-	}
-
-	// No records yet → no target.
-	if min, _ := progressTarget(&AloneSession{}, AloneRecords{}); min != 0 {
-		t.Errorf("no records should give target 0, got %d", min)
-	}
-}
-
 func TestDurStr(t *testing.T) {
 	for in, want := range map[int]string{0: "<1m", -5: "<1m", 40: "40m", 90: "1h 30m", 120: "2h"} {
 		if got := durStr(in); got != want {

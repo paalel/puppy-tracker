@@ -141,17 +141,17 @@ func parseTemplates() (*template.Template, error) {
 			}
 			return "bg-stone-100 text-stone-700"
 		},
-		// pillOn: selected-state classes for an alone-controls pill, by colour.
-		"pillOn": func(color string) string {
+		// badgeSel: classic btn-badge selected colours (pastel bg + 700 text), by meaning.
+		"badgeSel": func(color string) string {
 			switch color {
 			case "emerald":
-				return "border-emerald-200 bg-emerald-100 font-medium text-emerald-800"
+				return "bg-emerald-100 text-emerald-700 font-medium"
 			case "amber":
-				return "border-amber-200 bg-amber-100 font-medium text-amber-800"
+				return "bg-amber-100 text-amber-700 font-medium"
 			case "rose":
-				return "border-rose-200 bg-rose-100 font-medium text-rose-800"
+				return "bg-rose-100 text-rose-700 font-medium"
 			}
-			return "border-indigo-200 bg-indigo-100 font-medium text-indigo-800"
+			return "bg-indigo-100 text-indigo-700 font-medium"
 		},
 		"fmtMins": func(mins int) string {
 			if mins <= 0 {
