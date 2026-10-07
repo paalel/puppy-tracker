@@ -96,6 +96,53 @@ func deleteSkill(db *sql.DB, id int) error {
 	return err
 }
 
+// moveSkill shifts a skill up (dir -1) or down (dir +1) one place, renumbering
+// all positions by the resulting order so gaps from deletes can't desync it.
+func moveSkill(db *sql.DB, id, dir int) error {
+	rows, err := db.Query(`SELECT id FROM training_skills WHERE deleted_at IS NULL ORDER BY position, id`)
+	if err != nil {
+		return err
+	}
+	var ids []int
+	for rows.Next() {
+		var i int
+		if err := rows.Scan(&i); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, i)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	idx := -1
+	for i, v := range ids {
+		if v == id {
+			idx = i
+			break
+		}
+	}
+	j := idx + dir
+	if idx < 0 || j < 0 || j >= len(ids) {
+		return nil // not found or already at the edge
+	}
+	ids[idx], ids[j] = ids[j], ids[idx]
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	for pos, sid := range ids {
+		if _, err := tx.Exec(`UPDATE training_skills SET position = ? WHERE id = ?`, pos, sid); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // ── Reps ──────────────────────────────────────────────────────────────────
 
 func addRep(db *sql.DB, skillID int, quality string) (int, error) {

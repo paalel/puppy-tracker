@@ -31,6 +31,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/training/skill", h.handleSkillCreate)
 	mux.HandleFunc("POST /api/training/skill/{id}", h.handleSkillUpdate)
 	mux.HandleFunc("POST /api/training/skill/{id}/delete", h.handleSkillDelete)
+	mux.HandleFunc("POST /api/training/skill/{id}/move/{dir}", h.handleSkillMove)
 }
 
 // ── Today card ──────────────────────────────────────────────────────────────
@@ -241,6 +242,19 @@ func (h *Handler) handleSkillUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleSkillDelete(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(r.PathValue("id"))
 	if err := deleteSkill(h.db, id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderSkillsFrag(w)
+}
+
+func (h *Handler) handleSkillMove(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	dir := 1
+	if r.PathValue("dir") == "up" {
+		dir = -1
+	}
+	if err := moveSkill(h.db, id, dir); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
