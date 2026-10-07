@@ -183,9 +183,9 @@ func (h *Handler) handleNapDelete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleNapAdjust shifts a nap's start (col=start) or end (col=end) by delta
-// minutes — the ±5 controls on the running timer and on logged naps.
-func (h *Handler) handleNapAdjust(w http.ResponseWriter, r *http.Request) {
+// handleNapTime sets a nap's start (col=start) or end (col=end) to a local HH:MM
+// — the time pickers on the running timer and on logged naps.
+func (h *Handler) handleNapTime(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -194,13 +194,8 @@ func (h *Handler) handleNapAdjust(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("col") == "end" {
 		column = "ended_at"
 	}
-	delta, err := strconv.Atoi(r.FormValue("delta"))
-	if err != nil || delta < -120 || delta > 120 {
-		http.Error(w, "invalid delta", http.StatusBadRequest)
-		return
-	}
-	if err := adjustNapTime(h.db, pathID(r), column, delta); err != nil {
-		h.fail(w, "adjust nap", err)
+	if err := setNapTime(h.db, pathID(r), column, r.FormValue("time")); err != nil {
+		h.fail(w, "set nap time", err)
 		return
 	}
 	h.respond(w, "sleep", nil)

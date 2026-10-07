@@ -141,37 +141,35 @@ func resumeNap(db *sql.DB, id int) error {
 	return err
 }
 
-// adjustNapTime shifts a nap's start or end by deltaMinutes, clamped so start
-// stays before end (and neither crosses). column is an internal constant.
-func adjustNapTime(db *sql.DB, id int, column string, deltaMinutes int) error {
+// setNapTime sets a nap's start or end to a local HH:MM, keeping the nap's
+// existing date and the start<end ordering. column is an internal constant.
+func setNapTime(db *sql.DB, id int, column, hhmm string) error {
 	if column != "started_at" && column != "ended_at" {
 		return fmt.Errorf("invalid nap column %q", column)
 	}
-	var raw sql.NullString
-	if err := db.QueryRow(`SELECT `+column+` FROM naps WHERE id = ?`, id).Scan(&raw); err != nil {
-		return err
-	}
-	if !raw.Valid {
-		return nil // can't adjust an end that isn't set
-	}
-	t, err := store.ParseTimestamp(raw.String)
+	newTime, err := time.ParseInLocation("15:04", hhmm, time.Local)
 	if err != nil {
-		return err
+		return nil // ignore malformed input
 	}
-	shifted := t.Add(time.Duration(deltaMinutes) * time.Minute)
-
-	// Keep start < end when both exist.
 	n, err := napByID(db, id)
 	if err != nil || n == nil {
 		return err
 	}
-	if column == "started_at" && n.Ended != nil && !shifted.Before(*n.Ended) {
-		return nil
+	// Combine the new HH:MM with the nap's start date (local).
+	base := n.Started
+	combined := time.Date(base.Year(), base.Month(), base.Day(), newTime.Hour(), newTime.Minute(), 0, 0, time.Local)
+
+	switch column {
+	case "started_at":
+		if n.Ended != nil && !combined.Before(*n.Ended) {
+			return nil // would put start at/after end
+		}
+	case "ended_at":
+		if !combined.After(n.Started) {
+			return nil // would put end at/before start
+		}
 	}
-	if column == "ended_at" && !shifted.After(n.Started) {
-		return nil
-	}
-	_, err = db.Exec(`UPDATE naps SET `+column+` = ? WHERE id = ?`, store.FormatTimestamp(shifted), id)
+	_, err = db.Exec(`UPDATE naps SET `+column+` = ? WHERE id = ?`, store.FormatTimestamp(combined), id)
 	return err
 }
 

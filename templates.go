@@ -61,7 +61,20 @@ func parseTemplates() (*template.Template, error) {
 			}
 			return fmt.Sprintf("%dh %dm", mins/60, mins%60)
 		},
-		"clock":     func(t time.Time) string { return t.Format("15:04") },
+		"clock": func(t time.Time) string { return t.Format("15:04") },
+		// fmtTimeVal formats a time.Time or *time.Time (nil → "") as HH:MM local.
+		"fmtTimeVal": func(v any) string {
+			switch t := v.(type) {
+			case time.Time:
+				return t.Local().Format("15:04")
+			case *time.Time:
+				if t == nil {
+					return ""
+				}
+				return t.Local().Format("15:04")
+			}
+			return ""
+		},
 		"dateShort": func(t time.Time) string { return t.Format("Mon 02/01") },
 		"isoUTC":    func(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05Z") },
 		"ago": func(t time.Time) string {

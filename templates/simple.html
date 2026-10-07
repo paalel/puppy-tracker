@@ -86,7 +86,7 @@ let toastTimer;
 document.addEventListener('htmx:oobAfterSwap', e => {
   if (e.detail.target.id !== 'toast') return;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { e.detail.target.innerHTML = ''; }, 5000);
+  toastTimer = setTimeout(() => { e.detail.target.innerHTML = ''; }, 15000);
 });
 </script>
 </body>
@@ -156,10 +156,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
   <div class="flex flex-col items-center px-[18px] pb-2">
     <div data-timer data-start="{{isoUTC .Running.Started}}" aria-label="Sleep elapsed"
          class="mb-2 mt-0.5 text-[68px] font-light leading-none tracking-[-0.03em] text-indigo-950 tabular-nums">0:00<span data-timer-sec class="text-[34px] tracking-[-0.01em] text-indigo-400"></span></div>
-    <div class="mb-3 flex items-center gap-1.5 text-xs text-stone-500">
-      <span>Started {{clock .Running.Started}}</span>
-      {{template "nap-adjust" dict "ID" .Running.ID "Col" "start"}}
-    </div>
+    <div class="mb-3">{{template "nap-time" dict "ID" .Running.ID "Col" "start" "Emoji" "💤" "Time" .Running.Started}}</div>
     <button hx-post="/simple/naps/stop" hx-target="#card-sleep" hx-swap="outerHTML"
             class="h-11 w-full rounded-xl bg-indigo-600 text-sm font-medium text-white">Wake</button>
     <button hx-post="/simple/naps/discard" hx-target="#card-sleep" hx-swap="outerHTML"
@@ -179,9 +176,9 @@ document.addEventListener('htmx:oobAfterSwap', e => {
           {{if $.IsToday}}<button hx-delete="/simple/naps/{{.ID}}" hx-target="#card-sleep" hx-swap="outerHTML" aria-label="Remove nap" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>{{end}}
         </div>
         {{if $.IsToday}}
-        <div class="mt-1 flex items-center gap-3">
-          <span class="flex items-center gap-1.5 text-xs text-stone-400">start {{template "nap-adjust" dict "ID" .ID "Col" "start"}}</span>
-          <span class="flex items-center gap-1.5 text-xs text-stone-400">end {{template "nap-adjust" dict "ID" .ID "Col" "end"}}</span>
+        <div class="mt-1 flex items-center gap-2">
+          {{template "nap-time" dict "ID" .ID "Col" "start" "Emoji" "💤" "Time" .Started}}
+          {{template "nap-time" dict "ID" .ID "Col" "end" "Emoji" "☀️" "Time" .Ended}}
         </div>
         {{end}}
       </div>
@@ -194,14 +191,14 @@ document.addEventListener('htmx:oobAfterSwap', e => {
 </section>
 {{end}}
 
-{{/* nap-adjust: classic-style −/+ 5-minute nudger. dict ID, Col ("start"|"end") */}}
-{{define "nap-adjust"}}
-<span class="inline-flex items-center gap-1">
-  <button hx-post="/simple/naps/{{.ID}}/adjust" hx-vals='{"col":"{{.Col}}","delta":"-5"}' hx-target="#card-sleep" hx-swap="outerHTML"
-          class="grid h-7 w-7 place-items-center rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold select-none">−</button>
-  <button hx-post="/simple/naps/{{.ID}}/adjust" hx-vals='{"col":"{{.Col}}","delta":"5"}' hx-target="#card-sleep" hx-swap="outerHTML"
-          class="grid h-7 w-7 place-items-center rounded-lg bg-stone-100 text-stone-600 text-sm font-semibold select-none">+</button>
-</span>
+{{/* nap-time: classic time-input badge. dict ID, Col ("start"|"end"), Emoji, Time (*time.Time or time.Time) */}}
+{{define "nap-time"}}
+<label class="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5">
+  <span class="text-xs text-stone-400">{{.Emoji}}</span>
+  <input type="time" name="time" value="{{fmtTimeVal .Time}}"
+         hx-post="/simple/naps/{{.ID}}/time" hx-vals='{"col":"{{.Col}}"}' hx-target="#card-sleep" hx-swap="outerHTML" hx-trigger="change"
+         class="text-xs font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none w-[52px]">
+</label>
 {{end}}
 
 
