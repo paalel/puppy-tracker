@@ -37,9 +37,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 type skillVM struct {
 	Skill
-	Count int
-	Met   bool
-	Reps  []Rep
+	Count   int
+	Met     bool
+	Over    int // reps beyond target (0 if not over)
+	Reps    []Rep
+	IsToday bool
 }
 
 type cardVM struct {
@@ -49,7 +51,6 @@ type cardVM struct {
 	TotalToday int
 	DoneCount  int
 	IsToday    bool
-	Qualities  []string
 }
 
 // cardOrder is the training card's fixed slot in the simplified column — below
@@ -64,7 +65,7 @@ func (h *Handler) BuildCard(date string) (*cardVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	vm := &cardVM{Order: cardOrder, IsToday: date == store.RolloverDate(), Qualities: Qualities}
+	vm := &cardVM{Order: cardOrder, IsToday: date == store.RolloverDate()}
 	for _, s := range skills {
 		count, err := progressCount(h.db, s, date)
 		if err != nil {
@@ -74,7 +75,13 @@ func (h *Handler) BuildCard(date string) (*cardVM, error) {
 		if err != nil {
 			return nil, err
 		}
-		vm.Skills = append(vm.Skills, skillVM{Skill: s, Count: count, Met: count >= s.Target, Reps: reps})
+		over := 0
+		if count > s.Target {
+			over = count - s.Target
+		}
+		vm.Skills = append(vm.Skills, skillVM{
+			Skill: s, Count: count, Met: count >= s.Target, Over: over, Reps: reps, IsToday: vm.IsToday,
+		})
 		vm.TotalToday += len(reps)
 		if count >= s.Target {
 			vm.DoneCount++

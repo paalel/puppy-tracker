@@ -95,19 +95,34 @@ func parseTemplates() (*template.Template, error) {
 			}
 			return strings.ToUpper(q[:1]) + q[1:]
 		},
-		// qualityPill: badge colours for a training quality mark.
+		// qualityPill: pastel rating-button colours for a training quality mark.
 		"qualityPill": func(q string) string {
 			switch q {
 			case "bad":
-				return "border-rose-200 bg-rose-100 text-rose-800"
+				return "border-rose-200 bg-rose-50 text-rose-800"
 			case "okay":
-				return "border-amber-200 bg-amber-100 text-amber-800"
+				return "border-amber-200 bg-amber-50 text-amber-800"
 			case "good":
-				return "border-emerald-200 bg-emerald-100 text-emerald-800"
+				return "border-emerald-200 bg-emerald-50 text-emerald-800"
 			case "excellent":
-				return "border-emerald-600 bg-emerald-600 text-white"
+				return "border-emerald-300 bg-emerald-100 text-emerald-900"
 			}
 			return "border-stone-200 bg-stone-100 text-stone-700"
+		},
+		"qualities": func() []string { return []string{"bad", "okay", "good", "excellent"} },
+		// qualityDot: dot colour for a logged rep, by quality.
+		"qualityDot": func(q string) string {
+			switch q {
+			case "bad":
+				return "bg-rose-400"
+			case "okay":
+				return "bg-amber-400"
+			case "good":
+				return "bg-emerald-300"
+			case "excellent":
+				return "bg-emerald-600"
+			}
+			return "bg-stone-300"
 		},
 		"whereLabel": func(v string) string {
 			switch v {

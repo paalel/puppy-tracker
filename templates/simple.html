@@ -66,8 +66,33 @@ function restoreOpen(root) {
   const s = openSet();
   root.querySelectorAll('[data-card]').forEach(c => { if (s.has(c.dataset.card)) setOpen(c, true); });
 }
-document.addEventListener('htmx:afterSwap', e => { restoreOpen(e.detail.elt.parentElement || document); tick(); });
+
+// Training: per-exercise open state (localStorage, reset daily); edit mode in memory.
+const EX_KEY = 'training-ex-' + new Date().toLocaleDateString('sv-SE');
+const exPrefs = () => { try { return JSON.parse(localStorage.getItem(EX_KEY) || '{}'); } catch { return {}; } };
+const saveEx = (id, open) => { try { const p = exPrefs(); p[id] = open; localStorage.setItem(EX_KEY, JSON.stringify(p)); } catch {} };
+const editing = new Set();
+function applyEx(el) {
+  const p = exPrefs();
+  const open = el.dataset.ex in p ? p[el.dataset.ex] : el.dataset.defaultOpen === 'true';
+  el.dataset.exOpen = open;
+  el.dataset.editing = editing.has(el.dataset.ex);
+  el.querySelectorAll('[data-ex-toggle]').forEach(b => b.setAttribute('aria-expanded', open));
+  el.querySelectorAll('[data-edit-toggle]').forEach(b => b.setAttribute('aria-expanded', editing.has(el.dataset.ex)));
+}
+const applyAllEx = root => (root || document).querySelectorAll('[data-ex]').forEach(applyEx);
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-ex-toggle]');
+  if (t) { const ex = t.closest('[data-ex]'); saveEx(ex.dataset.ex, ex.dataset.exOpen !== 'true'); applyEx(ex); return; }
+  const ed = e.target.closest('[data-edit-toggle]');
+  if (ed) { const ex = ed.closest('[data-ex]'), id = ex.dataset.ex; editing.has(id) ? editing.delete(id) : editing.add(id); applyEx(ex); return; }
+  const lg = e.target.closest('[data-ex-log]');            // logging pins the exercise open for today
+  if (lg) saveEx(lg.closest('[data-ex]').dataset.ex, true);
+});
+
+document.addEventListener('htmx:afterSwap', e => { restoreOpen(e.detail.elt.parentElement || document); applyAllEx(); tick(); });
 restoreOpen(document);
+applyAllEx();
 
 const pad = n => String(n).padStart(2, '0');
 function tick() {
@@ -339,7 +364,7 @@ document.addEventListener('htmx:oobAfterSwap', e => {
       <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Training
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
       <span class="max-w-full truncate text-sm leading-5">
-        {{if not .Skills}}No skills yet{{else}}{{.DoneCount}}/{{len .Skills}} done{{if .TotalToday}} · {{.TotalToday}} today{{end}}{{end}}
+        {{if not .Skills}}No skills yet{{else}}{{.DoneCount}}/{{len .Skills}} done{{if .TotalToday}} · {{.TotalToday}} reps today{{end}}{{end}}
       </span>
     </button>
   </div>
@@ -347,35 +372,72 @@ document.addEventListener('htmx:oobAfterSwap', e => {
     {{if not .Skills}}
     <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">Add skills in Settings.</p>
     {{else}}
-    {{range .Skills}}
-    {{$sid := .ID}}
-    <div class="border-t border-stone-100 px-[18px] py-3">
-      <div class="flex items-baseline justify-between gap-2">
-        <span class="text-sm font-medium leading-5">{{.Name}}</span>
-        <span class="shrink-0 text-xs {{if .Met}}font-medium text-emerald-700{{else}}text-stone-500{{end}}">{{.Count}}/{{.Target}} {{if .Weekly}}this week{{else}}today{{end}}</span>
-      </div>
-      {{if .Instruction}}<p class="mt-0.5 text-xs leading-[18px] text-stone-400">{{.Instruction}}</p>{{end}}
-      {{if $.IsToday}}
-      <div class="mt-2 flex gap-1.5">
-        {{range $.Qualities}}
-        <button hx-post="/simple/training/skill/{{$sid}}/log" hx-vals='{"quality":"{{.}}"}' hx-target="#card-training" hx-swap="outerHTML"
-                class="h-[34px] min-w-0 flex-1 whitespace-nowrap rounded-lg border px-1.5 text-xs font-medium {{qualityPill .}}">{{qualityLabel .}}</button>
-        {{end}}
-      </div>
-      {{end}}
-      {{if .Reps}}
-      <div class="mt-2 hidden flex-wrap gap-1 group-data-[open=true]/card:flex">
-        {{range .Reps}}
-        <button hx-delete="/simple/training/rep/{{.ID}}" hx-target="#card-training" hx-swap="outerHTML" aria-label="Remove {{qualityLabel .Quality}} rep at {{clock .At}}"
-                class="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs {{qualityPill .Quality}}">{{clock .At}} <span class="font-semibold opacity-60">×</span></button>
-        {{end}}
-      </div>
-      {{end}}
-    </div>
-    {{end}}
+    {{range .Skills}}{{template "exercise" .}}{{end}}
     {{end}}
   </div>
 </section>
+{{end}}
+
+
+{{/* exercise — one training skill, independently collapsible. Met skills default
+     collapsed (data-default-open=false). (VM: skillVM) */}}
+{{define "exercise"}}
+<div id="ex-{{.ID}}" data-ex="{{.ID}}" data-default-open="{{if .Met}}false{{else}}true{{end}}" data-ex-open="{{if .Met}}false{{else}}true{{end}}" data-editing="false"
+     class="group/ex border-t border-stone-100">
+
+  {{/* compact row — shown when the exercise is collapsed */}}
+  <button type="button" data-ex-toggle aria-expanded="false"
+          class="flex w-full items-center gap-2.5 py-3 pl-[18px] pr-3.5 text-left group-data-[ex-open=true]/ex:hidden">
+    <span class="min-w-0 flex-1 truncate text-sm font-medium">{{.Name}}</span>
+    <span class="shrink-0 text-xs font-medium {{if .Met}}text-emerald-700{{else}}text-stone-600{{end}}">{{if .Met}}{{.Target}}{{else}}{{.Count}}{{end}}/{{.Target}}{{if .Met}} ✓{{end}}{{if .Over}} +{{.Over}}{{end}}</span>
+    <span class="flex min-w-0 shrink items-center gap-[3px] overflow-hidden">
+      {{range .Reps}}<span class="h-2 w-2 shrink-0 rounded-full {{qualityDot .Quality}}"></span>{{end}}
+    </span>
+    <svg class="h-3 w-3 shrink-0 text-stone-400" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg>
+  </button>
+
+  {{/* full view — shown when the exercise is open */}}
+  <div class="hidden flex-col gap-3 px-[18px] pb-4 pt-3 group-data-[ex-open=true]/ex:flex">
+    <button type="button" data-ex-toggle aria-expanded="true" class="flex w-full items-start gap-3 text-left">
+      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span class="text-sm font-medium leading-5">{{.Name}}</span>
+        {{if .Instruction}}<span class="text-xs leading-[18px] text-stone-500">{{.Instruction}}</span>{{end}}
+      </span>
+      <span class="flex shrink-0 items-baseline gap-1.5 pt-0.5 text-xs">
+        <span class="font-medium {{if .Met}}text-emerald-700{{else}}text-stone-600{{end}}">{{if .Met}}{{.Target}}{{else}}{{.Count}}{{end}}/{{.Target}}{{if .Met}} ✓{{end}}{{if .Over}} +{{.Over}}{{end}}</span>
+        <span class="text-stone-500">{{if .Weekly}}this week{{else}}today{{end}}</span>
+      </span>
+    </button>
+
+    {{if .IsToday}}
+    <div class="grid grid-cols-4 gap-1.5">
+      {{$sid := .ID}}
+      {{range qualities}}
+      <button hx-post="/simple/training/skill/{{$sid}}/log" hx-vals='{"quality":"{{.}}"}' hx-target="#card-training" hx-swap="outerHTML" data-ex-log
+              aria-label="Log {{qualityLabel .}} rep"
+              class="h-[36px] whitespace-nowrap rounded-lg border px-1 text-xs font-medium {{qualityPill .}}">{{qualityLabel .}}</button>
+      {{end}}
+    </div>
+    {{end}}
+
+    {{if .Reps}}
+    {{/* dot row doubles as the edit toggle; edit mode reveals removable chips */}}
+    <button type="button" data-edit-toggle aria-expanded="false"
+            class="-ml-[9px] -my-0.5 flex min-h-[30px] max-w-[calc(100%+16px)] flex-wrap items-center gap-[5px] self-start rounded-lg border border-transparent px-[9px] py-1.5 group-data-[editing=true]/ex:border-stone-300 group-data-[editing=true]/ex:bg-stone-100">
+      {{range .Reps}}<span class="h-2.5 w-2.5 rounded-full {{qualityDot .Quality}}"></span>{{end}}
+    </button>
+    <div class="hidden flex-wrap gap-1.5 rounded-xl bg-stone-50 p-2.5 group-data-[editing=true]/ex:flex">
+      {{range .Reps}}
+      <button hx-delete="/simple/training/rep/{{.ID}}" hx-target="#card-training" hx-swap="outerHTML" aria-label="Remove {{qualityLabel .Quality}} rep at {{clock .At}}"
+              class="flex h-[30px] items-center gap-1.5 rounded-lg border border-stone-200 bg-white pl-2.5 pr-2 text-xs text-stone-700">
+        <span class="h-2 w-2 rounded-full {{qualityDot .Quality}}"></span>{{qualityLabel .Quality}}
+        <svg class="h-[9px] w-[9px] text-stone-400" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg>
+      </button>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
 {{end}}
 
 
