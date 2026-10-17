@@ -37,6 +37,7 @@ type StatsData struct {
 	AccidentWeeklyJSON template.JS
 	TotalAccidents     int
 	PeeWeeklyJSON      template.JS
+	Training           *TrainingStats
 }
 
 func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +52,7 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tab := r.URL.Query().Get("tab")
-	if tab != "toilet" && tab != "alone" {
+	if tab != "toilet" && tab != "alone" && tab != "training" {
 		tab = "log"
 	}
 
@@ -61,6 +62,14 @@ func (h *Handler) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	}
 	sd := &StatsData{Days: days, Config: cfg, Tab: tab}
 	switch tab {
+	case "training":
+		ts, err := getTrainingStats(h.db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sd.Training = ts
+
 	case "alone":
 		as, err := getAloneStats(h.db)
 		if err != nil {

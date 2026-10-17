@@ -145,19 +145,31 @@ func moveSkill(db *sql.DB, id, dir int) error {
 
 // ── Reps ──────────────────────────────────────────────────────────────────
 
-func addRep(db *sql.DB, skillID int, quality string) (int, error) {
+func addRep(db *sql.DB, skillID int, quality, day string) (int, error) {
 	if !validQuality(quality) {
 		return 0, fmt.Errorf("invalid quality %q", quality)
 	}
 	res, err := db.Exec(
 		`INSERT INTO training_reps (day, at, skill_id, quality) VALUES (?, ?, ?, ?)`,
-		store.RolloverDate(), store.NowUTC(), skillID, quality,
+		day, stampFor(day), skillID, quality,
 	)
 	if err != nil {
 		return 0, err
 	}
 	id, err := res.LastInsertId()
 	return int(id), err
+}
+
+// stampFor is the UTC timestamp to store for a rep logged on `day`: the real now
+// when day is today, else noon of that day — a neutral default.
+func stampFor(day string) string {
+	if day == store.RolloverDate() {
+		return store.NowUTC()
+	}
+	if d, err := time.Parse("2006-01-02", day); err == nil {
+		return store.FormatTimestamp(time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, time.Local))
+	}
+	return store.NowUTC()
 }
 
 func deleteRep(db *sql.DB, id int) error {

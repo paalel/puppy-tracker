@@ -129,34 +129,38 @@ function scheduleToastClear() {
       <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Poop
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
       <span class="max-w-full truncate text-sm leading-5">
-        {{if and (eq .Count 0) (eq .Accidents 0)}}None yet today{{else}}{{.Count}} today · last {{clock .Last}}{{if .Accidents}}<span class="text-rose-800"> · {{.Accidents}} accident{{if gt .Accidents 1}}s{{end}}</span>{{end}}{{end}}
+        {{if and (eq .Count 0) (eq .Accidents 0)}}None yet{{else}}{{.Count}} · last {{clock .Last}}{{if .Accidents}}<span class="text-rose-800"> · {{.Accidents}} accident{{if gt .Accidents 1}}s{{end}}</span>{{end}}{{end}}
       </span>
       {{if .HasChance}}<span class="text-xs leading-4 text-amber-700">{{.ChancePct}}% poop chance now</span>{{end}}
     </button>
-    {{if .IsToday}}
-    <button hx-post="/simple/poops" hx-vals='{"kind":"accident"}' hx-target="#card-poop" hx-swap="outerHTML"
+    <button hx-post="/simple/poops?date={{.Date}}" hx-vals='{"kind":"accident"}' hx-target="#card-poop" hx-swap="outerHTML"
             class="h-9 shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-medium text-rose-800">Accident</button>
-    <button hx-post="/simple/poops" hx-vals='{"kind":"poop"}' hx-target="#card-poop" hx-swap="outerHTML"
+    <button hx-post="/simple/poops?date={{.Date}}" hx-vals='{"kind":"poop"}' hx-target="#card-poop" hx-swap="outerHTML"
             class="h-9 shrink-0 rounded-lg border border-amber-200 bg-amber-100 px-4 text-sm font-medium text-amber-800">＋ Poop</button>
-    {{end}}
   </div>
   <div class="hidden group-data-[open=true]/card:block">
     {{if .Poops}}
     {{range .Poops}}
-    <div class="flex min-h-[42px] items-center gap-3.5 border-t {{if .IsAccident}}border-rose-100 bg-rose-50{{else}}border-stone-100{{end}} pl-[18px] pr-2">
-      <span class="text-sm font-medium tabular-nums{{if .IsAccident}} text-rose-800{{end}}">{{clock .At}}</span>
+    <div class="flex min-h-[42px] items-center gap-2 border-t {{if .IsAccident}}border-rose-100 bg-rose-50{{else}}border-stone-100{{end}} pl-3 pr-2">
+      {{template "poop-time" dict "ID" .ID "Time" .At "Date" $.Date "Accident" .IsAccident}}
       <span class="min-w-0 flex-1 text-sm {{if .IsAccident}}text-rose-800{{else}}text-stone-500{{end}}">{{if .IsAccident}}Accident indoors{{else}}Poop{{end}}</span>
-      <span class="text-xs text-stone-400">{{ago .At}}</span>
-      {{if $.IsToday}}
-      <button hx-delete="/simple/poops/{{.ID}}" hx-target="#card-poop" hx-swap="outerHTML" aria-label="Remove" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>
-      {{end}}
+      <button hx-delete="/simple/poops/{{.ID}}?date={{$.Date}}" hx-target="#card-poop" hx-swap="outerHTML" aria-label="Remove" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>
     </div>
     {{end}}
     {{else}}
-    <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">Nothing logged yet today.</p>
+    <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">Nothing logged yet.</p>
     {{end}}
   </div>
 </section>
+{{end}}
+
+{{/* poop-time: editable time badge for a logged poop. dict ID, Time, Date, Accident */}}
+{{define "poop-time"}}
+<label class="inline-flex items-center rounded-lg px-2 py-1.5 {{if .Accident}}bg-rose-100{{else}}bg-stone-100{{end}}">
+  <input type="time" name="time" value="{{fmtTimeVal .Time}}"
+         hx-post="/simple/poops/{{.ID}}/time?date={{.Date}}" hx-target="#card-poop" hx-swap="outerHTML" hx-trigger="change"
+         class="text-sm font-mono bg-transparent border-0 p-0 focus:outline-none {{if .Accident}}text-rose-800{{else}}text-stone-600{{end}}">
+</label>
 {{end}}
 
 
@@ -169,12 +173,15 @@ function scheduleToastClear() {
       <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Sleep
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
       <span class="max-w-full truncate text-sm leading-5{{if .Running}} text-indigo-800{{end}}">
-        {{if .Running}}Asleep since {{clock .Running.Started}}{{else if eq .Count 0}}No naps yet today{{else}}{{.Count}} nap{{if gt .Count 1}}s{{end}} · {{dur .TotalMins}} · woke {{clock .Woke}}{{end}}
+        {{if .Running}}Asleep since {{clock .Running.Started}}{{else if eq .Count 0}}No naps yet{{else}}{{.Count}} nap{{if gt .Count 1}}s{{end}} · {{dur .TotalMins}} · woke {{clock .Woke}}{{end}}
       </span>
     </button>
     {{if and .IsToday (not .Running)}}
     <button hx-post="/simple/naps/start" hx-target="#card-sleep" hx-swap="outerHTML"
             class="h-9 shrink-0 rounded-lg border border-indigo-200 bg-indigo-100 px-4 text-sm font-medium text-indigo-800">Start</button>
+    {{else if not .IsToday}}
+    <button hx-post="/simple/naps/add?date={{.Date}}" hx-target="#card-sleep" hx-swap="outerHTML" data-open-card
+            class="h-9 shrink-0 rounded-lg border border-indigo-200 bg-indigo-100 px-4 text-sm font-medium text-indigo-800">Add nap</button>
     {{end}}
   </div>
 
@@ -191,7 +198,7 @@ function scheduleToastClear() {
     {{if .Running}}
     {{/* adjust the fell-asleep time or discard — behind the card toggle */}}
     <div class="flex items-center gap-2 border-t border-indigo-100 px-[18px] py-3">
-      {{template "nap-time" dict "ID" .Running.ID "Col" "start" "Emoji" "💤" "Time" .Running.Started}}
+      {{template "nap-time" dict "ID" .Running.ID "Col" "start" "Emoji" "💤" "Time" .Running.Started "Date" $.Date}}
       <button hx-post="/simple/naps/discard" hx-target="#card-sleep" hx-swap="outerHTML"
               class="ml-auto text-xs text-stone-400 hover:text-rose-600">Discard</button>
     </div>
@@ -204,18 +211,16 @@ function scheduleToastClear() {
           <span class="text-sm font-medium tabular-nums">{{clock .Started}}</span>
           <span class="text-xs text-stone-400">→</span>
           <span class="flex-1 text-sm text-indigo-800">{{dur .Minutes}}</span>
-          {{if $.IsToday}}<button hx-delete="/simple/naps/{{.ID}}" hx-target="#card-sleep" hx-swap="outerHTML" aria-label="Remove nap" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>{{end}}
+          <button hx-delete="/simple/naps/{{.ID}}?date={{$.Date}}" hx-target="#card-sleep" hx-swap="outerHTML" aria-label="Remove nap" class="grid h-9 w-9 place-items-center text-stone-400"><svg class="h-[11px] w-[11px]" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>
         </div>
-        {{if $.IsToday}}
         <div class="mt-1 flex items-center gap-2">
-          {{template "nap-time" dict "ID" .ID "Col" "start" "Emoji" "💤" "Time" .Started}}
-          {{template "nap-time" dict "ID" .ID "Col" "end" "Emoji" "☀️" "Time" .Ended}}
+          {{template "nap-time" dict "ID" .ID "Col" "start" "Emoji" "💤" "Time" .Started "Date" $.Date}}
+          {{template "nap-time" dict "ID" .ID "Col" "end" "Emoji" "☀️" "Time" .Ended "Date" $.Date}}
         </div>
-        {{end}}
       </div>
       {{end}}
       {{else}}
-      <p class="px-[18px] pb-3.5 pt-3 text-sm text-stone-500">No naps logged yet today.</p>
+      <p class="px-[18px] pb-3.5 pt-3 text-sm text-stone-500">No naps logged yet.</p>
       {{end}}
     </div>
   </div>
@@ -227,7 +232,7 @@ function scheduleToastClear() {
 <label class="inline-flex items-center gap-1.5 bg-stone-100 rounded-lg px-2.5 py-1.5">
   <span class="text-xs text-stone-400">{{.Emoji}}</span>
   <input type="time" name="time" value="{{fmtTimeVal .Time}}"
-         hx-post="/simple/naps/{{.ID}}/time" hx-vals='{"col":"{{.Col}}"}' hx-target="#card-sleep" hx-swap="outerHTML" hx-trigger="change"
+         hx-post="/simple/naps/{{.ID}}/time?date={{.Date}}" hx-vals='{"col":"{{.Col}}"}' hx-target="#card-sleep" hx-swap="outerHTML" hx-trigger="change"
          class="text-sm font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none">
 </label>
 {{end}}
@@ -256,7 +261,7 @@ function scheduleToastClear() {
     <button hx-post="/simple/alone/discard" hx-target="#card-alone" hx-swap="outerHTML"
             class="mt-0.5 h-9 px-3 text-xs text-stone-600">Discard timer</button>
   </div>
-  <div class="px-5 pb-5 pt-4 mt-1 border-t border-stone-100">{{template "alone-controls" (dict "S" .Running "Editing" false)}}</div>
+  <div class="px-5 pb-5 pt-4 mt-1 border-t border-stone-100">{{template "alone-controls" (dict "S" .Running "Editing" false "Date" .Date "Running" true)}}</div>
 
   {{else}}
   <div class="flex items-center gap-2.5 py-2.5 pl-[18px] pr-3.5">
@@ -264,12 +269,15 @@ function scheduleToastClear() {
       <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Home alone
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
       <span class="max-w-full truncate text-sm leading-5">
-        {{if .Sessions}}{{dur .TodayMin}} alone today{{else}}None yet today{{end}}
+        {{if .Sessions}}{{dur .TodayMin}} alone{{else}}None yet{{end}}
       </span>
     </button>
     {{if .IsToday}}
     <button hx-post="/simple/alone/start" hx-target="#card-alone" hx-swap="outerHTML"
             class="h-9 shrink-0 rounded-lg border border-sky-200 bg-sky-100 px-4 text-sm font-medium text-sky-700">Start</button>
+    {{else}}
+    <button hx-post="/simple/alone/add?date={{.Date}}" hx-target="#card-alone" hx-swap="outerHTML" data-open-card
+            class="h-9 shrink-0 rounded-lg border border-sky-200 bg-sky-100 px-4 text-sm font-medium text-sky-700">Add home alone</button>
     {{end}}
   </div>
   {{/* idle: today's sessions (with inline edit). Records live on the stats tab. */}}
@@ -278,9 +286,9 @@ function scheduleToastClear() {
     <div class="border-t border-stone-100">
       {{range .Sessions}}
       {{if eq .ID $.EditID}}
-      <div class="px-[18px] py-3">{{template "alone-controls" (dict "S" . "Editing" true)}}</div>
+      <div class="px-[18px] py-3">{{template "alone-controls" (dict "S" . "Editing" true "Date" $.Date "Running" false)}}</div>
       {{else}}
-      <button type="button" hx-get="/simple/alone/card?edit={{.ID}}" hx-target="#card-alone" hx-swap="outerHTML"
+      <button type="button" hx-get="/simple/alone/card?edit={{.ID}}&date={{$.Date}}" hx-target="#card-alone" hx-swap="outerHTML"
               class="flex w-full items-start gap-3.5 border-t border-stone-100 py-3 pl-[18px] pr-3 text-left first:border-t-0">
         <span class="pt-px text-sm font-medium tabular-nums">{{clock .Started}}</span>
         <span class="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -295,7 +303,7 @@ function scheduleToastClear() {
       {{end}}
     </div>
     {{else}}
-    <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">No home-alone sessions yet today.</p>
+    <p class="border-t border-stone-100 px-[18px] pb-3.5 pt-3 text-sm text-stone-500">No home-alone sessions yet.</p>
     {{end}}
   </div>
   {{end}}
@@ -316,47 +324,66 @@ function scheduleToastClear() {
 {{end}}
 
 
-{{/* alone-controls — classic section-label + btn-badge rows. (VM: dict S=AloneSession Editing=bool) */}}
+{{/* alone-controls — classic section-label + btn-badge rows. (VM: dict S=AloneSession Editing=bool Date=string Running=bool) */}}
 {{define "alone-controls"}}
 {{$id := .S.ID}}
+{{$date := .Date}}
+{{if not .Running}}
+<p class="section-label">Time</p>
+<div class="flex items-center gap-2">
+  {{template "alone-time" dict "ID" $id "Field" "start" "Emoji" "🚪" "Time" .S.Started "Date" $date}}
+  {{template "alone-time" dict "ID" $id "Field" "end" "Emoji" "🔑" "Time" .S.Ended "Date" $date}}
+</div>
+{{end}}
 <p class="section-label">Where</p>
 <div class="flex items-center gap-1">
-  {{template "alone-pill" (dict "ID" $id "Field" "where" "Value" "cage" "Label" "Cage" "Sel" (eq .S.Where "cage") "Color" "indigo")}}
-  {{template "alone-pill" (dict "ID" $id "Field" "where" "Value" "pen" "Label" "Pen" "Sel" (eq .S.Where "pen") "Color" "indigo")}}
-  {{template "alone-pill" (dict "ID" $id "Field" "where" "Value" "roaming" "Label" "Roaming" "Sel" (eq .S.Where "roaming") "Color" "indigo")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "where" "Value" "cage" "Label" "Cage" "Sel" (eq .S.Where "cage") "Color" "indigo")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "where" "Value" "pen" "Label" "Pen" "Sel" (eq .S.Where "pen") "Color" "indigo")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "where" "Value" "roaming" "Label" "Roaming" "Sel" (eq .S.Where "roaming") "Color" "indigo")}}
 </div>
 <p class="section-label">Sleep</p>
 <div class="flex items-center gap-1">
-  {{template "alone-pill" (dict "ID" $id "Field" "sleep" "Value" "well" "Label" "Slept well" "Sel" (eq .S.Sleep "well") "Color" "emerald")}}
-  {{template "alone-pill" (dict "ID" $id "Field" "sleep" "Value" "some" "Label" "Some" "Sel" (eq .S.Sleep "some") "Color" "amber")}}
-  {{template "alone-pill" (dict "ID" $id "Field" "sleep" "Value" "none" "Label" "Didn't sleep" "Sel" (eq .S.Sleep "none") "Color" "rose")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "sleep" "Value" "well" "Label" "Slept well" "Sel" (eq .S.Sleep "well") "Color" "emerald")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "sleep" "Value" "some" "Label" "Some" "Sel" (eq .S.Sleep "some") "Color" "amber")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "sleep" "Value" "none" "Label" "Didn't sleep" "Sel" (eq .S.Sleep "none") "Color" "rose")}}
 </div>
 <p class="section-label">Behaviour</p>
 <div class="flex items-center gap-1">
-  {{template "alone-pill" (dict "ID" $id "Field" "behaviour" "Value" "calm" "Label" "Calm" "Sel" (eq .S.Behaviour "calm") "Color" "emerald")}}
-  {{template "alone-pill" (dict "ID" $id "Field" "behaviour" "Value" "unsettled" "Label" "Unsettled" "Sel" (eq .S.Behaviour "unsettled") "Color" "amber")}}
-  {{template "alone-pill" (dict "ID" $id "Field" "behaviour" "Value" "stressed" "Label" "Stressed" "Sel" (eq .S.Behaviour "stressed") "Color" "rose")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "behaviour" "Value" "calm" "Label" "Calm" "Sel" (eq .S.Behaviour "calm") "Color" "emerald")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "behaviour" "Value" "unsettled" "Label" "Unsettled" "Sel" (eq .S.Behaviour "unsettled") "Color" "amber")}}
+  {{template "alone-pill" (dict "ID" $id "Date" $date "Field" "behaviour" "Value" "stressed" "Label" "Stressed" "Sel" (eq .S.Behaviour "stressed") "Color" "rose")}}
 </div>
 <p class="section-label">Destruction</p>
-<button hx-patch="/simple/alone/{{$id}}" hx-vals='{"destroyed":"toggle"}' hx-target="#card-alone" hx-swap="outerHTML" aria-pressed="{{.S.Destroyed}}"
+<button hx-patch="/simple/alone/{{$id}}?date={{$date}}" hx-vals='{"destroyed":"toggle"}' hx-target="#card-alone" hx-swap="outerHTML" aria-pressed="{{.S.Destroyed}}"
         class="btn-badge {{if .S.Destroyed}}bg-rose-100 text-rose-700 font-medium{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">Destroyed something</button>
 <p class="section-label">Note</p>
 <textarea name="note" placeholder="Add a note…" rows="1"
-          hx-patch="/simple/alone/{{$id}}" hx-trigger="input changed delay:600ms, blur" hx-swap="none"
+          hx-patch="/simple/alone/{{$id}}?date={{$date}}" hx-trigger="input changed delay:600ms, blur" hx-swap="none"
           oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
           class="w-full text-xs rounded-lg border border-stone-100 bg-transparent px-2 py-1 text-stone-500 placeholder-stone-300 focus:outline-none focus:border-stone-300 focus:bg-stone-50 transition-colors resize-none overflow-hidden">{{.S.Note}}</textarea>
 {{if .Editing}}
 <div class="mt-3 flex items-center justify-between">
-  <button hx-delete="/simple/alone/{{$id}}" hx-target="#card-alone" hx-swap="outerHTML" class="btn-badge bg-stone-100 text-stone-400 hover:text-rose-600">Delete</button>
-  <button hx-get="/simple/alone/card" hx-target="#card-alone" hx-swap="outerHTML" class="btn-badge bg-stone-100 text-stone-600 font-medium">Done</button>
+  <button hx-delete="/simple/alone/{{$id}}?date={{$date}}" hx-target="#card-alone" hx-swap="outerHTML" class="btn-badge bg-stone-100 text-stone-400 hover:text-rose-600">Delete</button>
+  <button hx-get="/simple/alone/card?date={{$date}}" hx-target="#card-alone" hx-swap="outerHTML" class="btn-badge bg-stone-100 text-stone-600 font-medium">Done</button>
 </div>
 {{end}}
 {{end}}
 
 
-{{/* alone-pill — classic btn-badge toggle. (VM: dict ID Field Value Label Sel Color) */}}
+{{/* alone-time: editable start/end time badge. dict ID, Field ("start"|"end"), Emoji, Time, Date */}}
+{{define "alone-time"}}
+<label class="inline-flex items-center gap-1.5 bg-stone-100 rounded-lg px-2.5 py-1.5">
+  <span class="text-xs text-stone-400">{{.Emoji}}</span>
+  <input type="time" name="{{.Field}}" value="{{fmtTimeVal .Time}}"
+         hx-patch="/simple/alone/{{.ID}}?date={{.Date}}" hx-target="#card-alone" hx-swap="outerHTML" hx-trigger="change"
+         class="text-sm font-mono text-stone-600 bg-transparent border-0 p-0 focus:outline-none">
+</label>
+{{end}}
+
+
+{{/* alone-pill — classic btn-badge toggle. (VM: dict ID Date Field Value Label Sel Color) */}}
 {{define "alone-pill"}}
-<button hx-patch="/simple/alone/{{.ID}}" hx-vals='{"{{.Field}}":"{{.Value}}"}' hx-target="#card-alone" hx-swap="outerHTML" aria-pressed="{{.Sel}}"
+<button hx-patch="/simple/alone/{{.ID}}?date={{.Date}}" hx-vals='{"{{.Field}}":"{{.Value}}"}' hx-target="#card-alone" hx-swap="outerHTML" aria-pressed="{{.Sel}}"
         class="btn-badge {{if .Sel}}{{badgeSel .Color}}{{else}}bg-stone-100 text-stone-400 hover:text-stone-600{{end}}">{{.Label}}</button>
 {{end}}
 
@@ -370,7 +397,7 @@ function scheduleToastClear() {
       <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Training
         <svg class="h-2.5 w-2.5 transition-transform group-aria-expanded:rotate-180" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5L7 9l3.5-3.5"/></svg></span>
       <span class="max-w-full truncate text-sm leading-5">
-        {{if not .Skills}}No skills yet{{else}}{{.DoneCount}}/{{len .Skills}} done{{if .TotalToday}} · {{.TotalToday}} reps today{{end}}{{end}}
+        {{if not .Skills}}No skills yet{{else}}{{.DoneCount}}/{{len .Skills}} done{{if .TotalToday}} · {{.TotalToday}} reps{{end}}{{end}}
       </span>
     </button>
   </div>
@@ -411,20 +438,19 @@ function scheduleToastClear() {
       </span>
       <span class="flex shrink-0 items-baseline gap-1.5 pt-0.5 text-xs">
         <span class="font-medium {{if .Met}}text-emerald-700{{else}}text-stone-600{{end}}">{{.Count}}/{{.Target}}{{if .Met}} ✓{{end}}</span>
-        <span class="text-stone-500">{{if .Weekly}}this week{{else}}today{{end}}</span>
+        <span class="text-stone-500">{{if .Weekly}}this week{{else if .IsToday}}today{{else}}that day{{end}}</span>
       </span>
     </button>
 
-    {{if .IsToday}}
     <div class="grid grid-cols-4 gap-1.5">
       {{$sid := .ID}}
+      {{$date := .Date}}
       {{range qualities}}
-      <button hx-post="/simple/training/skill/{{$sid}}/log" hx-vals='{"quality":"{{.}}"}' hx-target="#card-training" hx-swap="outerHTML"
+      <button hx-post="/simple/training/skill/{{$sid}}/log?date={{$date}}" hx-vals='{"quality":"{{.}}"}' hx-target="#card-training" hx-swap="outerHTML"
               aria-label="Log {{qualityLabel .}} rep"
               class="h-[36px] whitespace-nowrap rounded-lg border px-1 text-xs font-medium {{qualityPill .}}">{{qualityLabel .}}</button>
       {{end}}
     </div>
-    {{end}}
 
     {{if .Reps}}
     {{/* dot row doubles as the edit toggle; edit mode reveals removable chips */}}
@@ -434,7 +460,7 @@ function scheduleToastClear() {
     </button>
     <div class="hidden flex-wrap gap-1.5 rounded-xl bg-stone-50 p-2.5 group-data-[editing=true]/ex:flex">
       {{range .Reps}}
-      <button hx-delete="/simple/training/rep/{{.ID}}" hx-target="#card-training" hx-swap="outerHTML" aria-label="Remove {{qualityLabel .Quality}} rep at {{clock .At}}"
+      <button hx-delete="/simple/training/rep/{{.ID}}?date={{$.Date}}" hx-target="#card-training" hx-swap="outerHTML" aria-label="Remove {{qualityLabel .Quality}} rep at {{clock .At}}"
               class="flex h-[30px] items-center gap-1.5 rounded-lg border border-stone-200 bg-white pl-2.5 pr-2 text-xs text-stone-700">
         <span class="h-2 w-2 rounded-full {{qualityDot .Quality}}"></span>{{qualityLabel .Quality}}
         <svg class="h-[9px] w-[9px] text-stone-400" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg>

@@ -917,3 +917,219 @@ func queryDateMins(db *sql.DB, query string) (map[string]int, error) {
 	}
 	return m, rows.Err()
 }
+
+// ── Training ────────────────────────────────────────────────────────────────
+
+// skillRow is a skill that has at least one rep, with its per-day rep counts.
+type skillRow struct {
+	name   string
+	target int
+	weekly bool
+	active bool
+	days   map[string]int // day → rep count
+}
+
+// getTrainingStats assembles the Training tab: one GitHub-style contribution
+// grid per skill, over a shared range of week columns.
+func getTrainingStats(db *sql.DB) (*TrainingStats, error) {
+	today := store.RolloverDate()
+	skills, earliest, err := trainedSkills(db, today)
+	if err != nil || len(skills) == 0 {
+		return &TrainingStats{}, err
+	}
+
+	mondays := weekColumns(earliest, today)
+	ts := &TrainingStats{}
+	if len(mondays) > 0 {
+		ts.FirstLabel = mondays[0]
+	}
+	for _, s := range skills {
+		ts.Skills = append(ts.Skills, buildSkillGrid(s, mondays, today))
+	}
+	return ts, nil
+}
+
+// trainedSkills loads every skill that has reps (active first, then removed),
+// with its per-day counts, and returns the earliest rep date across all of them.
+func trainedSkills(db *sql.DB, today string) ([]skillRow, string, error) {
+	counts, err := repCountsBySkillDay(db)
+	if err != nil {
+		return nil, "", err
+	}
+	rows, err := db.Query(
+		`SELECT s.id, s.name, s.target, s.period, (s.deleted_at IS NULL)
+		 FROM training_skills s
+		 WHERE EXISTS (SELECT 1 FROM training_reps r WHERE r.skill_id = s.id AND r.deleted_at IS NULL)
+		 ORDER BY (s.deleted_at IS NULL) DESC, s.position, s.id`)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+
+	var out []skillRow
+	earliest := today
+	for rows.Next() {
+		var id, target, active int
+		var name, period string
+		if err := rows.Scan(&id, &name, &target, &period, &active); err != nil {
+			return nil, "", err
+		}
+		if target < 1 {
+			target = 1
+		}
+		days := counts[id]
+		for d := range days {
+			if d < earliest {
+				earliest = d
+			}
+		}
+		out = append(out, skillRow{name: name, target: target, weekly: period == "week", active: active == 1, days: days})
+	}
+	return out, earliest, rows.Err()
+}
+
+// repCountsBySkillDay returns skillID → day → rep count (non-deleted reps).
+func repCountsBySkillDay(db *sql.DB) (map[int]map[string]int, error) {
+	rows, err := db.Query(
+		`SELECT skill_id, day, COUNT(*) FROM training_reps
+		 WHERE deleted_at IS NULL GROUP BY skill_id, day`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int]map[string]int)
+	for rows.Next() {
+		var skill, n int
+		var day string
+		if err := rows.Scan(&skill, &day, &n); err != nil {
+			return nil, err
+		}
+		if out[skill] == nil {
+			out[skill] = make(map[string]int)
+		}
+		out[skill][day] = n
+	}
+	return out, rows.Err()
+}
+
+// weekColumns returns the Monday (date string) of each week from the week
+// containing `from` through the week containing `to`, oldest first.
+func weekColumns(from, to string) []string {
+	start := mondayOf(from)
+	end := mondayOf(to)
+	var out []string
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 7) {
+		out = append(out, d.Format("2006-01-02"))
+	}
+	return out
+}
+
+func mondayOf(day string) time.Time {
+	t, err := time.Parse("2006-01-02", day)
+	if err != nil {
+		return time.Time{}
+	}
+	return t.AddDate(0, 0, -((int(t.Weekday()) + 6) % 7))
+}
+
+// buildSkillGrid lays a skill's daily rep counts into week columns and scores
+// each day's adherence level, and computes a headline met-rate.
+func buildSkillGrid(s skillRow, mondays []string, today string) SkillGrid {
+	// A weekly target spreads over the week, so measure daily progress against a
+	// per-day share; a daily target is measured directly.
+	dailyTarget := s.target
+	if s.weekly {
+		dailyTarget = (s.target + 6) / 7
+		if dailyTarget < 1 {
+			dailyTarget = 1
+		}
+	}
+
+	g := SkillGrid{Name: s.name, Weekly: s.weekly, Target: s.target, Active: s.active}
+	for _, m := range mondays {
+		mt, _ := time.Parse("2006-01-02", m)
+		week := make([]DayCell, 7)
+		for i := 0; i < 7; i++ {
+			d := mt.AddDate(0, 0, i).Format("2006-01-02")
+			if d > today {
+				week[i] = DayCell{Level: -1} // future
+				continue
+			}
+			reps := s.days[d]
+			g.TotalReps += reps
+			week[i] = DayCell{Date: d, Reps: reps, Level: adherenceLevel(reps, dailyTarget)}
+		}
+		g.Weeks = append(g.Weeks, week)
+	}
+	g.MetRate = metRate(s, today)
+	return g
+}
+
+// adherenceLevel buckets a day's reps against the (daily) target into 0–4.
+func adherenceLevel(reps, target int) int {
+	switch {
+	case reps <= 0:
+		return 0
+	case reps >= target*2:
+		return 4
+	case reps >= target:
+		return 3
+	case reps*2 >= target:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// metRate is the share (0–100) of the skill's active periods whose target was
+// met — days for a daily skill, weeks for a weekly one — measured from its first
+// rep to today (or to its last rep, if it was removed from the routine).
+func metRate(s skillRow, today string) int {
+	first, last := "", ""
+	for d := range s.days {
+		if first == "" || d < first {
+			first = d
+		}
+		if d > last {
+			last = d
+		}
+	}
+	if first == "" {
+		return 0
+	}
+	end := today
+	if !s.active && last < end {
+		end = last
+	}
+
+	if s.weekly {
+		total, met := 0, 0
+		for w := mondayOf(first); w.Format("2006-01-02") <= end; w = w.AddDate(0, 0, 7) {
+			total++
+			reps := 0
+			for i := 0; i < 7; i++ {
+				reps += s.days[w.AddDate(0, 0, i).Format("2006-01-02")]
+			}
+			if reps >= s.target {
+				met++
+			}
+		}
+		if total == 0 {
+			return 0
+		}
+		return met * 100 / total
+	}
+
+	start, _ := time.Parse("2006-01-02", first)
+	days, met := 0, 0
+	for d := start; d.Format("2006-01-02") <= end; d = d.AddDate(0, 0, 1) {
+		days++
+		if s.days[d.Format("2006-01-02")] >= s.target {
+			met++
+		}
+	}
+	if days == 0 {
+		return 0
+	}
+	return met * 100 / days
+}

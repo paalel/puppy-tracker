@@ -24,9 +24,14 @@
                 {{if eq .Tab "alone"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Alone</a>
             <a href="/stats?tab=toilet" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
                 {{if eq .Tab "toilet"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Toilet</a>
+            <a href="/stats?tab=training" class="flex-1 text-center py-1.5 text-xs font-medium rounded-lg transition-colors
+                {{if eq .Tab "training"}}bg-white text-stone-700 shadow-sm{{else}}text-stone-400 hover:text-stone-600{{end}}">Training</a>
         </div>
 
-        {{if not .Days}}
+        {{if eq .Tab "training"}}
+        {{template "stats-training" .Training}}
+
+        {{else if not .Days}}
         <div class="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-8 text-center">
             <p class="text-sm text-stone-400">No completed sessions yet.</p>
             <p class="text-xs text-stone-300 mt-1">Stats appear once the first awake cycle is done.</p>
@@ -393,4 +398,58 @@
     {{template "nav" "stats"}}
 </body>
 </html>
+{{end}}
+
+
+{{/* ══════════════════ stats-training (VM: *TrainingStats) ══════════════════ */}}
+{{define "stats-training"}}
+{{if not .Skills}}
+<div class="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-8 text-center">
+    <p class="text-sm text-stone-400">No training logged yet.</p>
+    <p class="text-xs text-stone-300 mt-1">Log reps on the Training card to see progress here.</p>
+</div>
+{{else}}
+<div class="card p-4 mb-4">
+    <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-0.5">Hitting targets</p>
+    <p class="text-xs text-stone-300 mb-4">Each square is a day — greener means more of that day's target met. Where the colour sits shows when a skill was in the routine.</p>
+
+    <div class="space-y-5">
+    {{range .Skills}}
+    <div>
+        <div class="flex items-baseline justify-between mb-1.5">
+            <span class="text-xs font-medium {{if .Active}}text-stone-600{{else}}text-stone-400{{end}}">{{.Name}}{{if not .Active}} · stopped{{end}}</span>
+            <span class="text-[11px] text-stone-400">{{.Target}}×{{if .Weekly}}/wk{{else}}/day{{end}} · {{.MetRate}}% met</span>
+        </div>
+        {{/* horizontal-scroll contribution grid: one column per week, 7 rows Mon→Sun */}}
+        <div class="overflow-x-auto -mx-1 px-1">
+            <div class="inline-flex gap-[3px]">
+            {{range .Weeks}}
+                <div class="flex flex-col gap-[3px]">
+                {{range .}}
+                    <div class="w-[11px] h-[11px] rounded-[2px] {{heatClass .Level}}"
+                         {{if .Date}}title="{{fmtDate .Date}} · {{.Reps}} rep{{if ne .Reps 1}}s{{end}}"{{end}}></div>
+                {{end}}
+                </div>
+            {{end}}
+            </div>
+        </div>
+    </div>
+    {{end}}
+    </div>
+
+    {{/* axis + legend */}}
+    <div class="flex items-center justify-between mt-4">
+        <span class="text-[10px] text-stone-300">{{fmtDate .FirstLabel}} → now</span>
+        <div class="flex items-center gap-1 text-[10px] text-stone-400">
+            <span class="mr-0.5">Less</span>
+            <span class="w-[11px] h-[11px] rounded-[2px] bg-stone-100"></span>
+            <span class="w-[11px] h-[11px] rounded-[2px] bg-emerald-100"></span>
+            <span class="w-[11px] h-[11px] rounded-[2px] bg-emerald-300"></span>
+            <span class="w-[11px] h-[11px] rounded-[2px] bg-emerald-500"></span>
+            <span class="w-[11px] h-[11px] rounded-[2px] bg-emerald-700"></span>
+            <span class="ml-0.5">More</span>
+        </div>
+    </div>
+</div>
+{{end}}
 {{end}}

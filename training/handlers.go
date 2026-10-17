@@ -42,11 +42,13 @@ type skillVM struct {
 	Met     bool
 	Reps    []Rep
 	IsToday bool
+	Date    string
 }
 
 type cardVM struct {
 	Order      int
 	OOB        bool
+	Date       string
 	Skills     []skillVM
 	TotalToday int
 	DoneCount  int
@@ -65,7 +67,7 @@ func (h *Handler) BuildCard(date string) (*cardVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	vm := &cardVM{Order: cardOrder, IsToday: date == store.RolloverDate()}
+	vm := &cardVM{Order: cardOrder, Date: date, IsToday: date == store.RolloverDate()}
 	for _, s := range skills {
 		count, err := progressCount(h.db, s, date)
 		if err != nil {
@@ -76,7 +78,7 @@ func (h *Handler) BuildCard(date string) (*cardVM, error) {
 			return nil, err
 		}
 		vm.Skills = append(vm.Skills, skillVM{
-			Skill: s, Count: count, Met: count >= s.Target, Reps: reps, IsToday: vm.IsToday,
+			Skill: s, Count: count, Met: count >= s.Target, Reps: reps, IsToday: vm.IsToday, Date: date,
 		})
 		vm.TotalToday += len(reps)
 		if count >= s.Target {
@@ -86,8 +88,23 @@ func (h *Handler) BuildCard(date string) (*cardVM, error) {
 	return vm, nil
 }
 
-func (h *Handler) renderCard(w http.ResponseWriter, toast *toastVM) {
-	vm, err := h.BuildCard(store.RolloverDate())
+// reqDate returns the day an action applies to: the `date` form/query value,
+// clamped to never be in the future (default today) — mirrors simple.reqDate so
+// past days can be edited from the training card.
+func reqDate(r *http.Request) string {
+	today := store.RolloverDate()
+	d := r.FormValue("date")
+	if d == "" || d > today {
+		return today
+	}
+	if _, err := store.ParseDate(d); err != nil {
+		return today
+	}
+	return d
+}
+
+func (h *Handler) renderCard(w http.ResponseWriter, date string, toast *toastVM) {
+	vm, err := h.BuildCard(date)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -120,28 +137,30 @@ func (h *Handler) handleLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	quality := r.FormValue("quality")
-	id, err := addRep(h.db, skillID, quality)
+	date := reqDate(r)
+	id, err := addRep(h.db, skillID, quality, date)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderCard(w, &toastVM{
+	h.renderCard(w, date, &toastVM{
 		Msg:     skillName(h.db, skillID) + " · " + quality,
 		Target:  "#card-training",
-		UndoURL: "/simple/training/undo/del-rep:" + strconv.Itoa(id),
+		UndoURL: "/simple/training/undo/del-rep:" + strconv.Itoa(id) + "?date=" + date,
 	})
 }
 
 func (h *Handler) handleDeleteRep(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(r.PathValue("id"))
+	date := reqDate(r)
 	if err := deleteRep(h.db, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderCard(w, &toastVM{
+	h.renderCard(w, date, &toastVM{
 		Msg:     "Rep removed",
 		Target:  "#card-training",
-		UndoURL: "/simple/training/undo/undel-rep:" + strconv.Itoa(id),
+		UndoURL: "/simple/training/undo/undel-rep:" + strconv.Itoa(id) + "?date=" + date,
 	})
 }
 
@@ -161,7 +180,7 @@ func (h *Handler) handleUndo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderCard(w, nil)
+	h.renderCard(w, reqDate(r), nil)
 }
 
 func parseToken(token string) (string, int) {

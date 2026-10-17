@@ -31,15 +31,18 @@ func New(db *sql.DB, tmpl *template.Template, training trainingCardFn) *Handler 
 // RegisterRoutes registers the simplified action/fragment routes.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /simple/poops", h.handlePoopAdd)
+	mux.HandleFunc("POST /simple/poops/{id}/time", h.handlePoopTime)
 	mux.HandleFunc("DELETE /simple/poops/{id}", h.handlePoopDelete)
 
 	mux.HandleFunc("POST /simple/naps/start", h.handleNapStart)
+	mux.HandleFunc("POST /simple/naps/add", h.handleNapAdd)
 	mux.HandleFunc("POST /simple/naps/stop", h.handleNapStop)
 	mux.HandleFunc("POST /simple/naps/discard", h.handleNapDiscard)
 	mux.HandleFunc("POST /simple/naps/{id}/time", h.handleNapTime)
 	mux.HandleFunc("DELETE /simple/naps/{id}", h.handleNapDelete)
 
 	mux.HandleFunc("POST /simple/alone/start", h.handleAloneStart)
+	mux.HandleFunc("POST /simple/alone/add", h.handleAloneAdd)
 	mux.HandleFunc("POST /simple/alone/stop", h.handleAloneStop)
 	mux.HandleFunc("POST /simple/alone/discard", h.handleAloneDiscard)
 	mux.HandleFunc("PATCH /simple/alone/{id}", h.handleAlonePatch)

@@ -2,6 +2,7 @@ package simple
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"puppy/store"
@@ -98,6 +99,25 @@ func startAlone(db *sql.DB) (int, error) {
 	return int(id), err
 }
 
+// addAlone inserts a completed home-alone session on a (past) day with a neutral
+// default span (12:00–13:00), which the user then adjusts via the time pickers.
+func addAlone(db *sql.DB, day string) (int, error) {
+	d, err := time.Parse("2006-01-02", day)
+	if err != nil {
+		return 0, err
+	}
+	start := time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, time.Local)
+	res, err := db.Exec(
+		`INSERT INTO sessions (date, woke_at, slept_at, alone) VALUES (?, ?, ?, 1)`,
+		day, store.FormatTimestamp(start), store.FormatTimestamp(start.Add(time.Hour)),
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	return int(id), err
+}
+
 func stopAlone(db *sql.DB) (int, int, error) {
 	a, err := runningAlone(db)
 	if err != nil || a == nil {
@@ -129,6 +149,37 @@ func setAloneChoice(db *sql.DB, id int, column, value string) error {
 		value = ""
 	}
 	_, err := db.Exec(`UPDATE sessions SET `+column+` = ? WHERE id = ?`, value, id)
+	return err
+}
+
+// setAloneTime sets a session's start (woke_at) or end (slept_at) to a local
+// HH:MM, keeping the session's date and the start<end ordering. column is an
+// internal constant.
+func setAloneTime(db *sql.DB, id int, column, hhmm string) error {
+	if column != "woke_at" && column != "slept_at" {
+		return fmt.Errorf("invalid alone column %q", column)
+	}
+	newTime, err := time.ParseInLocation("15:04", hhmm, time.Local)
+	if err != nil {
+		return nil // ignore malformed input
+	}
+	a, err := aloneByID(db, id)
+	if err != nil || a == nil {
+		return err
+	}
+	base := a.Started
+	combined := time.Date(base.Year(), base.Month(), base.Day(), newTime.Hour(), newTime.Minute(), 0, 0, time.Local)
+	switch column {
+	case "woke_at":
+		if a.Ended != nil && !combined.Before(*a.Ended) {
+			return nil // would put start at/after end
+		}
+	case "slept_at":
+		if !combined.After(a.Started) {
+			return nil // would put end at/before start
+		}
+	}
+	_, err = db.Exec(`UPDATE sessions SET `+column+` = ? WHERE id = ?`, store.FormatTimestamp(combined), id)
 	return err
 }
 

@@ -6,7 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
+
+	"puppy/store"
 )
 
 // toastVM is the out-of-band toast with an optional undo action.
@@ -17,17 +18,34 @@ type toastVM struct {
 	UndoURL string // unused here; present so the shared toast template type-checks
 }
 
-// respond writes the primary card for today plus, out of band, the other running
-// card (whose order may have shifted) and the toast. The primary card is the
-// hx-target swap; everything else is an hx-swap-oob swap.
-func (h *Handler) respond(w http.ResponseWriter, primary string, toast *toastVM) {
+// reqDate returns the day an action applies to: the `date` form/query value,
+// clamped to today and never in the future (default today). This is what lets
+// past days be edited — every action and its re-render stay on that day.
+func reqDate(r *http.Request) string {
+	today := store.RolloverDate()
+	d := r.FormValue("date")
+	if d == "" || d > today {
+		return today
+	}
+	if _, err := store.ParseDate(d); err != nil {
+		return today
+	}
+	return d
+}
+
+// respond writes the primary card for the acted-on date plus, out of band, the
+// other running card (whose order may have shifted today) and the toast. The
+// primary card is the hx-target swap; everything else is an hx-swap-oob swap.
+func (h *Handler) respond(w http.ResponseWriter, date, primary string, toast *toastVM) {
 	var buf bytes.Buffer
-	if err := h.renderCard(&buf, primary, 0, false); err != nil {
+	if err := h.renderCard(&buf, date, primary, 0, false); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	for _, other := range h.otherRunning(primary) {
-		_ = h.renderCard(&buf, other, 0, true)
+	if date == today() {
+		for _, other := range h.otherRunning(primary) {
+			_ = h.renderCard(&buf, date, other, 0, true)
+		}
 	}
 	if toast != nil {
 		_ = h.tmpl.ExecuteTemplate(&buf, "toast", toast)
@@ -53,8 +71,7 @@ func (h *Handler) otherRunning(primary string) []string {
 	return nil
 }
 
-func (h *Handler) renderCard(buf *bytes.Buffer, name string, editID int, oob bool) error {
-	date := today()
+func (h *Handler) renderCard(buf *bytes.Buffer, date, name string, editID int, oob bool) error {
 	switch name {
 	case "poop":
 		vm, err := h.buildPoop(date)
@@ -88,8 +105,9 @@ func (h *Handler) fail(w http.ResponseWriter, what string, err error) {
 // ── Poop ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) handlePoopAdd(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
 	kind := r.FormValue("kind")
-	id, err := addPoop(h.db, kind)
+	id, err := addPoop(h.db, date, kind)
 	if err != nil {
 		h.fail(w, "add poop", err)
 		return
@@ -98,14 +116,15 @@ func (h *Handler) handlePoopAdd(w http.ResponseWriter, r *http.Request) {
 	if kind == "accident" {
 		label = "Accident"
 	}
-	h.respond(w, "poop", &toastVM{
-		Msg:    fmt.Sprintf("%s logged · %s", label, clockNow()),
+	h.respond(w, date, "poop", &toastVM{
+		Msg:    label + " logged",
 		Token:  "del-poop:" + strconv.Itoa(id),
 		Target: "#card-poop",
 	})
 }
 
 func (h *Handler) handlePoopDelete(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
 	id := pathID(r)
 	label := "Poop"
 	if poopKind(h.db, id) == "accident" {
@@ -115,11 +134,23 @@ func (h *Handler) handlePoopDelete(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, "delete poop", err)
 		return
 	}
-	h.respond(w, "poop", &toastVM{
+	h.respond(w, date, "poop", &toastVM{
 		Msg:    label + " removed",
 		Token:  "undel-poop:" + strconv.Itoa(id),
 		Target: "#card-poop",
 	})
+}
+
+func (h *Handler) handlePoopTime(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if err := setPoopTime(h.db, pathID(r), r.FormValue("time")); err != nil {
+		h.fail(w, "set poop time", err)
+		return
+	}
+	h.respond(w, reqDate(r), "poop", nil)
 }
 
 // ── Sleep ─────────────────────────────────────────────────────────────────
@@ -129,7 +160,22 @@ func (h *Handler) handleNapStart(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, "start nap", err)
 		return
 	}
-	h.respond(w, "sleep", nil)
+	h.respond(w, today(), "sleep", nil)
+}
+
+// handleNapAdd adds a completed nap to a past day (default span, then editable).
+func (h *Handler) handleNapAdd(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
+	id, err := addNap(h.db, date)
+	if err != nil {
+		h.fail(w, "add nap", err)
+		return
+	}
+	h.respond(w, date, "sleep", &toastVM{
+		Msg:    "Nap added",
+		Token:  "undel-nap:" + strconv.Itoa(id),
+		Target: "#card-sleep",
+	})
 }
 
 func (h *Handler) handleNapStop(w http.ResponseWriter, r *http.Request) {
@@ -139,10 +185,10 @@ func (h *Handler) handleNapStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if id == 0 { // nothing was running
-		h.respond(w, "sleep", nil)
+		h.respond(w, today(), "sleep", nil)
 		return
 	}
-	h.respond(w, "sleep", &toastVM{
+	h.respond(w, today(), "sleep", &toastVM{
 		Msg:    "Nap logged · " + durStr(mins),
 		Token:  "resume-nap:" + strconv.Itoa(id),
 		Target: "#card-sleep",
@@ -156,14 +202,14 @@ func (h *Handler) handleNapDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if n == nil {
-		h.respond(w, "sleep", nil)
+		h.respond(w, today(), "sleep", nil)
 		return
 	}
 	if err := softDelete(h.db, "naps", n.ID); err != nil {
 		h.fail(w, "discard nap", err)
 		return
 	}
-	h.respond(w, "sleep", &toastVM{
+	h.respond(w, today(), "sleep", &toastVM{
 		Msg:    "Timer discarded",
 		Token:  "undel-nap:" + strconv.Itoa(n.ID),
 		Target: "#card-sleep",
@@ -171,12 +217,13 @@ func (h *Handler) handleNapDiscard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleNapDelete(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
 	id := pathID(r)
 	if err := softDelete(h.db, "naps", id); err != nil {
 		h.fail(w, "delete nap", err)
 		return
 	}
-	h.respond(w, "sleep", &toastVM{
+	h.respond(w, date, "sleep", &toastVM{
 		Msg:    "Nap removed",
 		Token:  "undel-nap:" + strconv.Itoa(id),
 		Target: "#card-sleep",
@@ -198,7 +245,7 @@ func (h *Handler) handleNapTime(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, "set nap time", err)
 		return
 	}
-	h.respond(w, "sleep", nil)
+	h.respond(w, reqDate(r), "sleep", nil)
 }
 
 // ── Home alone ──────────────────────────────────────────────────────────────
@@ -208,7 +255,23 @@ func (h *Handler) handleAloneStart(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, "start alone", err)
 		return
 	}
-	h.respond(w, "alone", nil)
+	h.respond(w, today(), "alone", nil)
+}
+
+// handleAloneAdd adds a completed home-alone session to a past day (default span,
+// then editable).
+func (h *Handler) handleAloneAdd(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
+	id, err := addAlone(h.db, date)
+	if err != nil {
+		h.fail(w, "add alone", err)
+		return
+	}
+	h.respond(w, date, "alone", &toastVM{
+		Msg:    "Home alone added",
+		Token:  "undel-alone:" + strconv.Itoa(id),
+		Target: "#card-alone",
+	})
 }
 
 func (h *Handler) handleAloneStop(w http.ResponseWriter, r *http.Request) {
@@ -218,10 +281,10 @@ func (h *Handler) handleAloneStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if id == 0 {
-		h.respond(w, "alone", nil)
+		h.respond(w, today(), "alone", nil)
 		return
 	}
-	h.respond(w, "alone", &toastVM{
+	h.respond(w, today(), "alone", &toastVM{
 		Msg:    "Home alone logged · " + durStr(mins),
 		Token:  "resume-alone:" + strconv.Itoa(id),
 		Target: "#card-alone",
@@ -235,14 +298,14 @@ func (h *Handler) handleAloneDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a == nil {
-		h.respond(w, "alone", nil)
+		h.respond(w, today(), "alone", nil)
 		return
 	}
 	if err := deleteAlone(h.db, a.ID); err != nil {
 		h.fail(w, "discard alone", err)
 		return
 	}
-	h.respond(w, "alone", &toastVM{
+	h.respond(w, today(), "alone", &toastVM{
 		Msg:    "Home alone discarded",
 		Token:  "undel-alone:" + strconv.Itoa(a.ID),
 		Target: "#card-alone",
@@ -250,6 +313,7 @@ func (h *Handler) handleAloneDiscard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAlonePatch(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
 	id := pathID(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -265,6 +329,13 @@ func (h *Handler) handleAlonePatch(w http.ResponseWriter, r *http.Request) {
 		err = setAloneChoice(h.db, id, "alone_behaviour", r.FormValue("behaviour"))
 	case r.Form.Has("destroyed"):
 		err = toggleAloneDestroyed(h.db, id)
+	case r.Form.Has("start"), r.Form.Has("end"):
+		col := "woke_at"
+		val := r.FormValue("start")
+		if r.Form.Has("end") {
+			col, val = "slept_at", r.FormValue("end")
+		}
+		err = setAloneTime(h.db, id, col, val)
 	case r.Form.Has("note"):
 		if err := setAloneNote(h.db, id, r.FormValue("note")); err != nil {
 			h.fail(w, "set note", err)
@@ -280,16 +351,17 @@ func (h *Handler) handleAlonePatch(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, "update alone", err)
 		return
 	}
-	h.respond(w, "alone", nil)
+	h.respond(w, date, "alone", nil)
 }
 
 func (h *Handler) handleAloneDelete(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
 	id := pathID(r)
 	if err := deleteAlone(h.db, id); err != nil {
 		h.fail(w, "delete alone", err)
 		return
 	}
-	h.respond(w, "alone", &toastVM{
+	h.respond(w, date, "alone", &toastVM{
 		Msg:    "Home alone removed",
 		Token:  "undel-alone:" + strconv.Itoa(id),
 		Target: "#card-alone",
@@ -297,9 +369,10 @@ func (h *Handler) handleAloneDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAloneCard(w http.ResponseWriter, r *http.Request) {
+	date := reqDate(r)
 	editID, _ := strconv.Atoi(r.URL.Query().Get("edit"))
 	var buf bytes.Buffer
-	if err := h.renderCard(&buf, "alone", editID, false); err != nil {
+	if err := h.renderCard(&buf, date, "alone", editID, false); err != nil {
 		h.fail(w, "alone card", err)
 		return
 	}
@@ -335,7 +408,7 @@ func (h *Handler) handleUndo(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, "undo", err)
 		return
 	}
-	h.respond(w, card, nil)
+	h.respond(w, reqDate(r), card, nil)
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -366,5 +439,3 @@ func durStr(m int) string {
 	}
 	return fmt.Sprintf("%dh %dm", m/60, m%60)
 }
-
-func clockNow() string { return time.Now().Format("15:04") }

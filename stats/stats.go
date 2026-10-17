@@ -102,3 +102,33 @@ type FloatPoint struct {
 	X string  `json:"x"`
 	Y float64 `json:"y"`
 }
+
+// ── Training ────────────────────────────────────────────────────────────────
+
+// TrainingStats is the Training tab payload: one GitHub-style contribution grid
+// per skill. The cell colour shows how well the day's target was met (adherence)
+// and where the coloured cells sit over the shared week columns shows the
+// routine — when each skill was trained. All skills share the same week columns
+// so the grids line up and skills that stopped read as trailing-off activity.
+type TrainingStats struct {
+	Skills     []SkillGrid
+	FirstLabel string // Monday of the earliest week column (grid left edge)
+}
+
+type SkillGrid struct {
+	Name      string
+	Weekly    bool
+	Target    int
+	Active    bool // still in the routine (not removed)
+	TotalReps int
+	MetRate   int         // % of active days (or weeks) the target was met
+	Weeks     [][]DayCell // week columns, each 7 cells Mon→Sun
+}
+
+// DayCell is one day in a skill's grid. Level sets the colour: -1 out-of-range
+// (future / before the window), 0 none, 1–4 increasing share of target met.
+type DayCell struct {
+	Date  string
+	Reps  int
+	Level int
+}

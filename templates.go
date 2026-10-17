@@ -24,6 +24,24 @@ func parseTemplates() (*template.Template, error) {
 	funcs := template.FuncMap{
 		"div": func(a, b int) int { return a / b },
 		"mul": func(a, b int) int { return a * b },
+		// heatClass maps a contribution-grid adherence level to a cell colour:
+		// -1 out-of-range, 0 none, 1–4 increasing share of target met.
+		"heatClass": func(level int) string {
+			switch level {
+			case 1:
+				return "bg-emerald-100"
+			case 2:
+				return "bg-emerald-300"
+			case 3:
+				return "bg-emerald-500"
+			case 4:
+				return "bg-emerald-700"
+			case 0:
+				return "bg-stone-100"
+			default:
+				return "bg-transparent"
+			}
+		},
 		"isPhase": func(p sessions.Phase, name string) bool {
 			return p == sessions.Phase(name)
 		},

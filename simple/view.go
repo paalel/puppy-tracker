@@ -26,6 +26,7 @@ type pageVM struct {
 type poopVM struct {
 	Order     int
 	OOB       bool
+	Date      string // the viewed day; threaded into action URLs as ?date=
 	Poops     []Poop
 	Count     int        // poop entries (excludes accidents)
 	Accidents int        // accident entries
@@ -38,6 +39,7 @@ type poopVM struct {
 type sleepVM struct {
 	Order     int
 	OOB       bool
+	Date      string
 	Running   *Nap
 	Naps      []Nap // completed, chronological
 	Count     int
@@ -49,6 +51,7 @@ type sleepVM struct {
 type aloneVM struct {
 	Order     int
 	OOB       bool
+	Date      string
 	PuppyName string
 	Running   *AloneSession
 	Sessions  []AloneSession // completed today, newest first
@@ -110,7 +113,7 @@ func (h *Handler) buildPoop(date string) (*poopVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	vm := &poopVM{Poops: poops, Order: 10, IsToday: date == today()}
+	vm := &poopVM{Poops: poops, Order: 10, Date: date, IsToday: date == today()}
 	for i := range poops {
 		if poops[i].IsAccident() {
 			vm.Accidents++
@@ -135,7 +138,7 @@ func (h *Handler) buildSleep(date string) (*sleepVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	vm := &sleepVM{Order: 11, IsToday: date == today()}
+	vm := &sleepVM{Order: 11, Date: date, IsToday: date == today()}
 	// The running nap is shown in its own UI, not the completed list.
 	for _, n := range naps {
 		if n.Running() {
@@ -177,7 +180,7 @@ func (h *Handler) buildAlone(date string, editID int) (*aloneVM, error) {
 	if err != nil {
 		return nil, err
 	}
-	vm := &aloneVM{Order: 12, Records: rec, EditID: editID, IsToday: date == today()}
+	vm := &aloneVM{Order: 12, Date: date, Records: rec, EditID: editID, IsToday: date == today()}
 	if cfg, err := config.Get(h.db); err == nil {
 		vm.PuppyName = cfg.PuppyName
 	}

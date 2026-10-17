@@ -18,19 +18,51 @@ type Poop struct {
 
 func (p Poop) IsAccident() bool { return p.Kind == "accident" }
 
-func addPoop(db *sql.DB, kind string) (int, error) {
+// stampFor is the UTC timestamp to store for an entry logged on `day`: the real
+// now when day is today, else noon of that day — a neutral default the user can
+// adjust with the time pickers.
+func stampFor(day string) string {
+	if day == store.RolloverDate() {
+		return store.NowUTC()
+	}
+	if d, err := time.Parse("2006-01-02", day); err == nil {
+		return store.FormatTimestamp(time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, time.Local))
+	}
+	return store.NowUTC()
+}
+
+func addPoop(db *sql.DB, day, kind string) (int, error) {
 	if kind != "accident" {
 		kind = "poop"
 	}
 	res, err := db.Exec(
 		`INSERT INTO poops (day, at, kind) VALUES (?, ?, ?)`,
-		store.RolloverDate(), store.NowUTC(), kind,
+		day, stampFor(day), kind,
 	)
 	if err != nil {
 		return 0, err
 	}
 	id, err := res.LastInsertId()
 	return int(id), err
+}
+
+// setPoopTime sets a poop's time to a local HH:MM, keeping its day.
+func setPoopTime(db *sql.DB, id int, hhmm string) error {
+	nt, err := time.ParseInLocation("15:04", hhmm, time.Local)
+	if err != nil {
+		return nil
+	}
+	var day string
+	if err := db.QueryRow(`SELECT day FROM poops WHERE id = ?`, id).Scan(&day); err != nil {
+		return err
+	}
+	d, err := time.Parse("2006-01-02", day)
+	if err != nil {
+		return err
+	}
+	at := time.Date(d.Year(), d.Month(), d.Day(), nt.Hour(), nt.Minute(), 0, 0, time.Local)
+	_, err = db.Exec(`UPDATE poops SET at = ? WHERE id = ?`, store.FormatTimestamp(at), id)
+	return err
 }
 
 func listPoops(db *sql.DB, day string) ([]Poop, error) {
@@ -112,6 +144,25 @@ func startNap(db *sql.DB) (int, error) {
 		return n.ID, nil
 	}
 	res, err := db.Exec(`INSERT INTO naps (day, started_at) VALUES (?, ?)`, store.RolloverDate(), store.NowUTC())
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	return int(id), err
+}
+
+// addNap inserts a completed nap on a (past) day with a neutral default span
+// (12:00–12:30), which the user then adjusts via the time pickers.
+func addNap(db *sql.DB, day string) (int, error) {
+	d, err := time.Parse("2006-01-02", day)
+	if err != nil {
+		return 0, err
+	}
+	start := time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, time.Local)
+	res, err := db.Exec(
+		`INSERT INTO naps (day, started_at, ended_at) VALUES (?, ?, ?)`,
+		day, store.FormatTimestamp(start), store.FormatTimestamp(start.Add(30*time.Minute)),
+	)
 	if err != nil {
 		return 0, err
 	}
